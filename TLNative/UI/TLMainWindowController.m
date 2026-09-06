@@ -1393,9 +1393,14 @@
 - (void)chatRemoveNetwork:(id)sender
 {
 	TLNetwork *network = [self currentChatNetwork];
-	if (network) {
-		[self contextMenuCloseChannelId:[[network lobby] identifier] isLobby:YES];
+	if (!network) {
+		return;
 	}
+	if ([self isNostermNetwork:network]) {
+		[self contextMenuForgetNetworkForChannelId:[[network lobby] identifier]];
+		return;
+	}
+	[self contextMenuCloseChannelId:[[network lobby] identifier] isLobby:YES];
 }
 
 - (void)chatJoinChannel:(id)sender

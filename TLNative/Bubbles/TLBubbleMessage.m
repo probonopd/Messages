@@ -19,6 +19,14 @@
 	return [m autorelease];
 }
 
++ (instancetype)dateSeparatorWithText:(NSString *)text
+{
+	TLBubbleMessage *m = [[TLBubbleMessage alloc] init];
+	m.text = text;
+	m.isDateSeparator = YES;
+	return [m autorelease];
+}
+
 - (void)dealloc
 {
 	[_senderName release];
@@ -26,6 +34,7 @@
 	[_attributedText release];
 	[_senderColor release];
 	[_avatar release];
+	[_timestamp release];
 	[super dealloc];
 }
 

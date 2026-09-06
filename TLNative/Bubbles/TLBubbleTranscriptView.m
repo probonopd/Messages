@@ -30,6 +30,7 @@
 	CGFloat _textMeasureWidth;
 	BOOL _outgoing;
 	BOOL _isTyping;
+	BOOL _isDateSeparator;
 }
 
 @end
@@ -132,6 +133,13 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 	NSTextStorage *_textStorage;
 	NSLayoutManager *_layoutManager;
 	NSTextContainer *_textContainer;
+
+	// Text selection state.
+	NSInteger _selectionStartCellIndex;
+	NSInteger _selectionEndCellIndex;
+	NSPoint _selectionStartPoint;
+	NSPoint _selectionEndPoint;
+	BOOL _isSelecting;
 }
 
 @synthesize theme = _theme;
@@ -153,6 +161,11 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 		    initWithContainerSize:NSMakeSize(FLT_MAX, FLT_MAX)];
 		[_textContainer setLineFragmentPadding:0.0];
 		[_layoutManager addTextContainer:_textContainer];
+
+		// Initialize selection state.
+		_selectionStartCellIndex = -1;
+		_selectionEndCellIndex = -1;
+		_isSelecting = NO;
 	}
 	return self;
 }
@@ -178,14 +191,35 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 	return YES;
 }
 
+- (BOOL)acceptsFirstResponder
+{
+	return YES;
+}
+
+- (BOOL)becomeFirstResponder
+{
+	return YES;
+}
+
+- (BOOL)resignFirstResponder
+{
+	return YES;
+}
+
 // Finger cursor over speaker pictures and over the exact glyph runs that
-// mouseDown would resolve to a link.
+// mouseDown would resolve to a link. I-beam cursor over text for selection.
 - (void)resetCursorRects
 {
 	NSCursor *hand = [NSCursor pointingHandCursor];
+	NSCursor *iBeam = [NSCursor IBeamCursor];
 	for (TLBubbleCell *cell in _cells) {
 		if (!NSIsEmptyRect(cell->_avatarRect)) {
 			[self addCursorRect:cell->_avatarRect cursor:hand];
+		}
+
+		// Add I-beam cursor for text areas (except date separators and typing).
+		if (!cell->_isDateSeparator && !cell->_isTyping && !NSIsEmptyRect(cell->_textRect)) {
+			[self addCursorRect:cell->_textRect cursor:iBeam];
 		}
 
 		NSAttributedString *string = [self displayStringForMessage:cell->_message];
@@ -215,9 +249,30 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 
 #pragma mark Public API
 
+// Returns YES if the message has no meaningful content to display.
+static BOOL TLMessageShouldBeSkipped(TLBubbleMessage *message)
+{
+	if (message == nil) {
+		return YES;
+	}
+	if ([message isDateSeparator]) {
+		return NO; // Date separators are meaningful.
+	}
+	NSString *text = [[message attributedText] string];
+	if (text == nil) {
+		text = [message text];
+	}
+	// Skip completely empty messages.
+	return [text length] == 0;
+}
+
 - (void)addMessage:(TLBubbleMessage *)message
 {
 	if (message == nil) {
+		return;
+	}
+	// Skip completely empty messages.
+	if (TLMessageShouldBeSkipped(message)) {
 		return;
 	}
 	[_messages addObject:message];
@@ -230,7 +285,13 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 	if ([messages count] == 0) {
 		return;
 	}
-	[_messages addObjectsFromArray:messages];
+	// Filter out empty messages.
+	for (TLBubbleMessage *message in messages) {
+		if (message == nil || TLMessageShouldBeSkipped(message)) {
+			continue;
+		}
+		[_messages addObject:message];
+	}
 	_pendingScrollToBottom = _autoScrollsToBottom;
 	[self relayout];
 }
@@ -246,8 +307,17 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 	    : 0.0;
 	CGFloat oldHeight = _laidOutHeight;
 
+	// Filter out empty messages before prepending.
+	NSMutableArray *filtered = [NSMutableArray array];
+	for (TLBubbleMessage *message in messages) {
+		if (message == nil || TLMessageShouldBeSkipped(message)) {
+			continue;
+		}
+		[filtered addObject:message];
+	}
+
 	[_messages replaceObjectsInRange:NSMakeRange(0, 0)
-	                   withObjectsFromArray:messages];
+	                   withObjectsFromArray:filtered];
 
 	// Unlike append, loading history must not yank the reader to the end.
 	_pendingScrollToBottom = NO;
@@ -321,7 +391,8 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 
 // Finds a link under the click by re-measuring only the cell the click
 // landed in; points outside any text never open anything. A click on the
-// speaker picture selects that participant instead.
+// speaker picture selects that participant instead. Otherwise, starts text
+// selection for copy.
 - (void)mouseDown:(NSEvent *)event
 {
 	NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
@@ -352,7 +423,214 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 			break;
 		}
 	}
-	[super mouseDown:event];
+
+	// Handle selection - shift-click extends from anchor, regular click sets new anchor.
+	NSInteger cellIdx = [self cellIndexAtPoint:point];
+	if (cellIdx >= 0) {
+		if ([event modifierFlags] & NSShiftKeyMask) {
+			// Shift-click: extend selection from anchor to clicked cell.
+			if (_selectionStartCellIndex >= 0) {
+				_selectionEndCellIndex = cellIdx;
+			} else {
+				// No anchor yet, treat as regular click.
+				_selectionStartCellIndex = cellIdx;
+				_selectionEndCellIndex = cellIdx;
+			}
+		} else {
+			// Regular click: set new anchor.
+			_selectionStartCellIndex = cellIdx;
+			_selectionEndCellIndex = cellIdx;
+		}
+		_selectionStartPoint = point;
+		_selectionEndPoint = point;
+		_isSelecting = YES;
+	} else {
+		// Clear existing selection when clicking on empty space.
+		_selectionStartCellIndex = -1;
+		_selectionEndCellIndex = -1;
+		_isSelecting = NO;
+	}
+	[self setNeedsDisplay:YES];
+
+	// Ensure we are first responder so copy: keyboard shortcut works.
+	[[self window] makeFirstResponder:self];
+}
+
+- (NSMenu *)menuForEvent:(NSEvent *)event
+{
+	// Context menu operates on the current selection without modifying it.
+	// If nothing is selected, select the cell under the cursor first.
+	NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
+	NSInteger cellIdx = [self cellIndexAtPoint:point];
+
+	if (_selectionStartCellIndex < 0 && cellIdx >= 0) {
+		// No existing selection - select the cell under cursor.
+		_selectionStartCellIndex = cellIdx;
+		_selectionEndCellIndex = cellIdx;
+		[self setNeedsDisplay:YES];
+	}
+
+	NSMenu *menu = [[NSMenu alloc] initWithTitle:@""];
+	NSMenuItem *copyItem = [[NSMenuItem alloc] initWithTitle:@"Copy"
+		action:@selector(copy:) keyEquivalent:@""];
+	[copyItem setTarget:self];
+	[menu addItem:copyItem];
+	[copyItem release];
+	[menu autorelease];
+	return menu;
+}
+
+- (void)mouseDragged:(NSEvent *)event
+{
+	if (!_isSelecting) {
+		return;
+	}
+	NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
+	_selectionEndPoint = point;
+	_selectionEndCellIndex = [self cellIndexAtPoint:point];
+	[self setNeedsDisplay:YES];
+}
+
+- (void)mouseUp:(NSEvent *)event
+{
+	_isSelecting = NO;
+	[self setNeedsDisplay:YES];
+}
+
+- (NSInteger)cellIndexAtPoint:(NSPoint)point
+{
+	for (NSInteger i = 0; i < (NSInteger)[_cells count]; i++) {
+		TLBubbleCell *cell = [_cells objectAtIndex:i];
+		if (NSPointInRect(point, cell->_bubbleRect)) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+// Returns YES if the given cell index is within the current selection.
+- (BOOL)isCellSelected:(NSInteger)cellIndex
+{
+	if (cellIndex < 0 || _selectionStartCellIndex < 0 || _selectionEndCellIndex < 0) {
+		return NO;
+	}
+	NSInteger minIdx = MIN(_selectionStartCellIndex, _selectionEndCellIndex);
+	NSInteger maxIdx = MAX(_selectionStartCellIndex, _selectionEndCellIndex);
+	return cellIndex >= minIdx && cellIndex <= maxIdx;
+}
+
+// Simplified: select all text in the cell if any part is selected.
+// For more precise character-level selection, we'd use the text layout.
+- (NSRange)selectionRangeInCell:(TLBubbleCell *)cell atPoint:(NSPoint)point
+{
+	if (!NSPointInRect(point, cell->_textRect)) {
+		return NSMakeRange(NSNotFound, 0);
+	}
+	NSAttributedString *str = [self displayStringForMessage:cell->_message];
+	return NSMakeRange(0, [str length]);
+}
+
+- (NSString *)selectedPlainText
+{
+	if (_selectionStartCellIndex < 0 || _selectionEndCellIndex < 0) {
+		return @"";
+	}
+	NSMutableString *result = [NSMutableString string];
+	NSInteger minIdx = MIN(_selectionStartCellIndex, _selectionEndCellIndex);
+	NSInteger maxIdx = MAX(_selectionStartCellIndex, _selectionEndCellIndex);
+
+	for (NSInteger i = minIdx; i <= maxIdx; i++) {
+		if (i >= (NSInteger)[_cells count]) {
+			break;
+		}
+		TLBubbleCell *cell = [_cells objectAtIndex:i];
+		TLBubbleMessage *msg = cell->_message;
+
+		if (cell->_isTyping) {
+			continue;
+		}
+
+		NSString *line = [self plainTextLineForMessage:msg];
+		if ([line length] > 0) {
+			if ([result length] > 0) {
+				[result appendString:@"\n"];
+			}
+			[result appendString:line];
+		}
+	}
+	return result;
+}
+
+// Formats a single message for plain-text copy, matching non-bubble view style.
+// Includes timestamp at the beginning.
+- (NSString *)plainTextLineForMessage:(TLBubbleMessage *)message
+{
+	if ([message isDateSeparator]) {
+		NSString *text = [message text] ?: @"";
+		return [NSString stringWithFormat:@"--- %@ ---", text];
+	}
+	if ([message plainLine]) {
+		return [message text] ?: @"";
+	}
+
+	// Get timestamp once from the message.
+	NSDate *ts = [message timestamp];
+	NSString *timeStr = @"";
+	if (ts != nil) {
+		NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+		[fmt setDateFormat:@"HH:mm"];
+		timeStr = [fmt stringFromDate:ts];
+		[fmt release];
+	}
+
+	// Use the raw text property (no timestamp).
+	NSString *text = [message text] ?: @"";
+
+	NSString *sender = [message senderName] ?: @"";
+
+	// Actions render as "* nick text"
+	if ([text length] > 2 && [text characterAtIndex:0] == '*' && [text characterAtIndex:1] == ' ') {
+		return [NSString stringWithFormat:@"%@  %@", timeStr, text];
+	}
+
+	if ([sender length] > 0) {
+		return [NSString stringWithFormat:@"%@  %@: %@", timeStr, sender, text];
+	}
+	return [NSString stringWithFormat:@"%@  %@", timeStr, text];
+}
+
+- (void)copy:(id)sender
+{
+	NSString *text = [self selectedPlainText];
+	if ([text length] == 0) {
+		text = [self allPlainText];
+	}
+	NSPasteboard *pb = [NSPasteboard generalPasteboard];
+	[pb declareTypes:[NSArray arrayWithObject:NSStringPboardType] owner:nil];
+	[pb setString:text forType:NSStringPboardType];
+	// Clear selection after copy (standard behavior).
+	_selectionStartCellIndex = -1;
+	_selectionEndCellIndex = -1;
+	_isSelecting = NO;
+	[self setNeedsDisplay:YES];
+}
+
+- (NSString *)allPlainText
+{
+	NSMutableString *result = [NSMutableString string];
+	for (TLBubbleCell *cell in _cells) {
+		if (cell->_isTyping) {
+			continue;
+		}
+		NSString *line = [self plainTextLineForMessage:cell->_message];
+		if ([line length] > 0) {
+			if ([result length] > 0) {
+				[result appendString:@"\n"];
+			}
+			[result appendString:line];
+		}
+	}
+	return result;
 }
 
 #pragma mark Layout
@@ -406,6 +684,7 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 	cell->_message = [message retain];
 	cell->_outgoing = [message outgoing];
 	cell->_isTyping = isTyping;
+	cell->_isDateSeparator = [message isDateSeparator];
 	cell->_senderName = [[message senderName] copy];
 	cell->_avatar = [[message avatar] retain];
 
@@ -421,6 +700,25 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 		CGFloat w = floor(t.avatarSide * 1.45);
 		bubbleRect = NSMakeRect(0.0, top, w, h);
 		cellHeight = h;
+	} else if ([message isDateSeparator]) {
+		// Date separator: centered text spanning the transcript width.
+		NSString *dateText = [message text] ?: @"";
+		NSFont *font = [NSFont systemFontOfSize:11.0];
+		NSDictionary *attrs = @{
+			NSFontAttributeName: font,
+			NSForegroundColorAttributeName: [NSColor colorWithCalibratedWhite:0.5 alpha:1.0]
+		};
+		NSAttributedString *string = [[NSAttributedString alloc] initWithString:dateText attributes:attrs];
+		CGFloat availWidth = width - 2.0 * inset;
+		NSSize ideal = [self measureString:string width:availWidth];
+		cell->_textMeasureWidth = availWidth;
+		CGFloat textWidth = MIN(ideal.width, availWidth);
+		CGFloat cellW = availWidth;
+		CGFloat cellH = ideal.height + 2.0 * t.paddingV;
+		bubbleRect = NSMakeRect(inset, top, cellW, cellH);
+		textRect = NSMakeRect(inset, top + t.paddingV, textWidth, ideal.height);
+		cellHeight = cellH;
+		[string release];
 	} else if ([message plainLine]) {
 		// Status text spans the transcript width; no balloon, no avatar.
 		NSAttributedString *string = [self displayStringForMessage:message];
@@ -460,8 +758,8 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 	}
 
 	// Horizontal placement: picture in the margin on the speaker's side,
-	// balloon filling towards the opposite side.
-	if ([message plainLine]) {
+	// balloon filling towards the opposite side. Date separators are centered.
+	if ([message plainLine] || [message isDateSeparator]) {
 		cell->_bubbleRect = bubbleRect;
 		cell->_textRect = textRect;
 		cell->_avatarRect = NSZeroRect;
@@ -494,6 +792,46 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 
 #pragma mark Layout
 
+// Returns YES if two dates are on different calendar days.
+static BOOL TLDateIsDifferentDay(NSDate *a, NSDate *b)
+{
+	NSCalendar *cal = [NSCalendar currentCalendar];
+	if (cal == nil) {
+		return YES;
+	}
+	NSDateComponents *compsA = [cal components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:a];
+	NSDateComponents *compsB = [cal components:NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay fromDate:b];
+	return compsA.year != compsB.year ||
+	       compsA.month != compsB.month ||
+	       compsA.day != compsB.day;
+}
+
+// Returns a formatted date string for display in a date separator.
+static NSString *TLDateSeparatorString(NSDate *date)
+{
+	if (date == nil) {
+		return @"";
+	}
+	NSCalendar *cal = [NSCalendar currentCalendar];
+	if (cal == nil) {
+		return [date description];
+	}
+	NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+	[formatter setDateFormat:@"EEEE, MMMM d, yyyy"];
+	[formatter setCalendar:cal];
+	NSString *result = [formatter stringFromDate:date];
+	[formatter release];
+	return result ?: @"";
+}
+
+- (NSDate *)dateForMessage:(TLBubbleMessage *)message
+{
+	if ([message timestamp] != nil) {
+		return [message timestamp];
+	}
+	return [NSDate date];
+}
+
 // Rebuilds every cell rectangle. Content is laid out from the top and then
 // pushed down so short transcripts hug the bottom edge, keeping the newest
 // balloon next to the compose area like a conversation expects.
@@ -513,6 +851,7 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 	CGFloat cursor = topPad;
 
 	NSUInteger count = [_messages count];
+	NSDate *lastDate = nil;
 	for (NSUInteger i = 0; i < count; i++) {
 		TLBubbleMessage *message = [_messages objectAtIndex:i];
 		BOOL grouped = NO;
@@ -523,6 +862,23 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 			    [[previous senderName] isEqualToString:[message senderName]];
 		}
 		cursor += grouped ? t.sameSpeakerGap : t.messageGap;
+
+		// Insert a date separator when the day changes, except for the first
+		// message or when the previous message was itself a date separator.
+		NSDate *msgDate = [self dateForMessage:message];
+		BOOL prevWasDateSep = (i > 0) && [[_messages objectAtIndex:i - 1] isDateSeparator];
+		if (lastDate != nil && !prevWasDateSep && TLDateIsDifferentDay(lastDate, msgDate)) {
+			TLBubbleMessage *sep = [TLBubbleMessage dateSeparatorWithText:TLDateSeparatorString(msgDate)];
+			CGFloat sepHeight = 0.0;
+			[self appendCellWithMessage:sep
+			                typingState:NO
+			                       atTop:cursor
+			             transcriptWidth:width
+			                      result:NULL
+			                     height:&sepHeight];
+			cursor += sepHeight + t.messageGap;
+		}
+		lastDate = msgDate;
 
 		CGFloat cellHeight = 0.0;
 		[self appendCellWithMessage:message
@@ -897,6 +1253,15 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 	[self paintGlossInRect:bubbleRect intensity:[_theme glossIntensity]];
 	[[NSGraphicsContext currentContext] restoreGraphicsState];
 
+	// Draw selection "active ring" - a blue outline around the balloon.
+	if ([self isCellSelected:[_cells indexOfObject:cell]]) {
+		[[NSColor colorWithCalibratedRed:0.3 green:0.45 blue:1.0 alpha:1.0] setStroke];
+		NSBezierPath *ring = [path copy];
+		[ring setLineWidth:3.0];
+		[ring stroke];
+		[ring release];
+	}
+
 	if (!cell->_isTyping) {
 		NSAttributedString *string =
 		    [self displayStringForMessage:cell->_message];
@@ -928,6 +1293,28 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 	[_theme.transcriptBackground setFill];
 	NSRectFillUsingOperation([self bounds], NSCompositeSourceOver);
 
+	// Draw selection highlight behind selected cells - a stronger blue.
+	// Skip date separators, plainLine (technical messages), and typing - they are not highlighted.
+	if (_selectionStartCellIndex >= 0 && _selectionEndCellIndex >= 0) {
+		NSInteger minIdx = MIN(_selectionStartCellIndex, _selectionEndCellIndex);
+		NSInteger maxIdx = MAX(_selectionStartCellIndex, _selectionEndCellIndex);
+		for (NSInteger i = minIdx; i <= maxIdx; i++) {
+			if (i >= 0 && i < (NSInteger)[_cells count]) {
+				TLBubbleCell *cell = [_cells objectAtIndex:i];
+				// Skip non-content cells: date separators, plainLine (joins/parts/pings), typing.
+				if (cell->_isDateSeparator || cell->_isTyping) {
+					continue;
+				}
+				if ([cell->_message plainLine]) {
+					continue; // Technical messages are not highlighted.
+				}
+				// Strong blue selection highlight.
+				[[NSColor colorWithCalibratedRed:0.6 green:0.72 blue:1.0 alpha:1.0] setFill];
+				NSRectFillUsingOperation(cell->_bubbleRect, NSCompositeSourceOver);
+			}
+		}
+	}
+
 	for (TLBubbleCell *cell in _cells) {
 		[[NSGraphicsContext currentContext] saveGraphicsState];
 		[self drawAvatarOfCell:cell];
@@ -946,6 +1333,19 @@ static NSColor *TLLerpColor(NSColor *a, NSColor *b, CGFloat t)
 			[cloud setLineWidth:1.0];
 			[cloud stroke];
 			[self drawTypingDotsOfCell:cell];
+		} else if (cell->_isDateSeparator) {
+			// Date separator: draw centered muted text.
+			NSString *text = [cell->_message text] ?: @"";
+			NSFont *font = [NSFont systemFontOfSize:11.0];
+			NSDictionary *attrs = @{
+				NSFontAttributeName: font,
+				NSForegroundColorAttributeName: [NSColor colorWithCalibratedWhite:0.5 alpha:1.0]
+			};
+			NSSize textSize = [text sizeWithAttributes:attrs];
+			CGFloat centerX = NSMidX(cell->_bubbleRect) - textSize.width / 2.0;
+			NSPoint textPoint = NSMakePoint(centerX, NSMinY(cell->_bubbleRect) +
+				(NSHeight(cell->_bubbleRect) - textSize.height) / 2.0);
+			[text drawAtPoint:textPoint withAttributes:attrs];
 		} else {
 			[self drawBalloonOfCell:cell];
 		}

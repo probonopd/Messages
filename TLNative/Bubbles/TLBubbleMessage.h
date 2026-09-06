@@ -25,8 +25,17 @@
 // transcript width instead of a balloon plus avatar.
 @property (nonatomic, assign) BOOL plainLine;
 
+// Date separators show a centered date label when the day changes mid-chat.
+// The text property holds the formatted date string to display.
+@property (nonatomic, assign) BOOL isDateSeparator;
+
+// The message timestamp, used for date separator detection.
+@property (nonatomic, retain) NSDate *timestamp;
+
 + (instancetype)messageWithText:(NSString *)text
                      senderName:(NSString *)senderName
                        outgoing:(BOOL)outgoing;
+
++ (instancetype)dateSeparatorWithText:(NSString *)text;
 
 @end

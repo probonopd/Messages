@@ -486,11 +486,11 @@
 	}
 
 	if ([notification.userInfo[@"recoverable"] boolValue]) {
-		// The session reconnects on its own; keep the chat window up and
-		// only inform the user about the drop.
-		[self showAlertWithTitle:@"Connection Lost"
-			detail:message
-			hint:@"The Lounge will keep trying to reconnect in the background."];
+		if (![[_session protocol] isNostermProtocol]) {
+			[self showAlertWithTitle:@"Connection Lost"
+				detail:message
+				hint:@"The Lounge will keep trying to reconnect in the background."];
+		}
 		return;
 	}
 

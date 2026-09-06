@@ -142,15 +142,14 @@ static BOOL TLIsTrailingPunctuation(unichar c)
 		[result addAttribute:NSLinkAttributeName
 		                value:url
 		                range:r];
-		// Underline unstyled links for affordance; keep IRC colors.
-		if ([result attribute:NSUnderlineStyleAttributeName
-		                atIndex:r.location
-		          effectiveRange:NULL] == nil) {
-			[result addAttribute:NSUnderlineStyleAttributeName
-			    value:[NSNumber numberWithInteger:
-			                NSUnderlineStyleSingle]
-			    range:r];
-		}
+		// Apply blue color and underline to make links stand out;
+		// these override any IRC colors for the link portion.
+		[result addAttribute:NSForegroundColorAttributeName
+		                value:[NSColor colorWithCalibratedRed:0.0 green:0.4 blue:0.9 alpha:1.0]
+		                range:r];
+		[result addAttribute:NSUnderlineStyleAttributeName
+		    value:[NSNumber numberWithInteger:NSUnderlineStyleSingle]
+		    range:r];
 	}];
 	return [result autorelease];
 }

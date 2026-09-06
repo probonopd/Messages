@@ -179,6 +179,7 @@
 	bubble.outgoing = [message isSelf];
 	bubble.plainLine = [message isSystemMessage];
 	bubble.senderName = nick;
+	bubble.timestamp = message.timestamp;
 	// Same palette as the text log and the avatar, so one user always has
 	// one color across all three renderings.
 	if (![message isSystemMessage]) {
