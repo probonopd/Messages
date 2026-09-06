@@ -562,7 +562,6 @@ static BOOL TLMessageShouldBeSkipped(TLBubbleMessage *message)
 }
 
 // Formats a single message for plain-text copy, matching non-bubble view style.
-// Includes timestamp at the beginning.
 - (NSString *)plainTextLineForMessage:(TLBubbleMessage *)message
 {
 	if ([message isDateSeparator]) {
@@ -573,7 +572,14 @@ static BOOL TLMessageShouldBeSkipped(TLBubbleMessage *message)
 		return [message text] ?: @"";
 	}
 
-	// Get timestamp once from the message.
+	// For bubble messages, attributedText.string already contains the full
+	// formatted line (timestamp + sender + text). Use it directly.
+	NSAttributedString *attrText = [message attributedText];
+	if (attrText != nil) {
+		return [attrText string];
+	}
+
+	// Fallback for messages without attributedText: construct from parts.
 	NSDate *ts = [message timestamp];
 	NSString *timeStr = @"";
 	if (ts != nil) {
@@ -583,15 +589,8 @@ static BOOL TLMessageShouldBeSkipped(TLBubbleMessage *message)
 		[fmt release];
 	}
 
-	// Use the raw text property (no timestamp).
 	NSString *text = [message text] ?: @"";
-
 	NSString *sender = [message senderName] ?: @"";
-
-	// Actions render as "* nick text"
-	if ([text length] > 2 && [text characterAtIndex:0] == '*' && [text characterAtIndex:1] == ' ') {
-		return [NSString stringWithFormat:@"%@  %@", timeStr, text];
-	}
 
 	if ([sender length] > 0) {
 		return [NSString stringWithFormat:@"%@  %@: %@", timeStr, sender, text];
