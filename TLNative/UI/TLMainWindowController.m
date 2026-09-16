@@ -130,7 +130,11 @@
 	[_statusLabel setEditable:NO];
 	[_statusLabel setSelectable:NO];
 	[_statusLabel setBezeled:NO];
-	[_statusLabel setDrawsBackground:NO];
+	// A transparent label relies on its superview repainting behind it,
+	// which misses areas under a fractional scale factor and leaves the
+	// previous status text visible underneath the new one.
+	[_statusLabel setDrawsBackground:YES];
+	[_statusLabel setBackgroundColor:[NSColor windowBackgroundColor]];
 	[_statusLabel setAutoresizingMask:NSViewMaxYMargin];
 	[bar addSubview:_statusLabel];
 
