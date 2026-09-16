@@ -1285,12 +1285,32 @@ static NSString *TLDateSeparatorString(NSDate *date)
 	}
 }
 
+// Everything a cell paints, including the tail beyond the bubble rect and
+// the drop shadow, so culling against the dirty rect never clips a cell.
+- (NSRect)paintRectOfCell:(TLBubbleCell *)cell
+{
+	NSRect rect = cell->_bubbleRect;
+	if (!NSIsEmptyRect(cell->_textRect)) {
+		rect = NSUnionRect(rect, cell->_textRect);
+	}
+	if (!NSIsEmptyRect(cell->_avatarRect)) {
+		rect = NSUnionRect(rect, cell->_avatarRect);
+	}
+	// Shadow blur radius plus its vertical offset.
+	CGFloat shadowReach = 3.0 + 2.0;
+	return NSInsetRect(rect, -(_theme.tailLength + shadowReach), -shadowReach);
+}
+
 - (void)drawRect:(NSRect)dirtyRect
 {
 	[self relayoutIfNeeded];
 
+	// Transcripts grow to many screens tall and every cell is costly to
+	// paint (gradients, shadows, text layout), so only touch what the
+	// dirty rect needs; otherwise each caret blink or scroll step repaints
+	// the whole history.
 	[_theme.transcriptBackground setFill];
-	NSRectFillUsingOperation([self bounds], NSCompositeSourceOver);
+	NSRectFillUsingOperation(dirtyRect, NSCompositeSourceOver);
 
 	// Draw selection highlight behind selected cells - a stronger blue.
 	// Skip date separators, plainLine (technical messages), and typing - they are not highlighted.
@@ -1307,6 +1327,9 @@ static NSString *TLDateSeparatorString(NSDate *date)
 				if ([cell->_message plainLine]) {
 					continue; // Technical messages are not highlighted.
 				}
+				if (!NSIntersectsRect(cell->_bubbleRect, dirtyRect)) {
+					continue;
+				}
 				// Strong blue selection highlight.
 				[[NSColor colorWithCalibratedRed:0.6 green:0.72 blue:1.0 alpha:1.0] setFill];
 				NSRectFillUsingOperation(cell->_bubbleRect, NSCompositeSourceOver);
@@ -1315,6 +1338,9 @@ static NSString *TLDateSeparatorString(NSDate *date)
 	}
 
 	for (TLBubbleCell *cell in _cells) {
+		if (!NSIntersectsRect([self paintRectOfCell:cell], dirtyRect)) {
+			continue;
+		}
 		[[NSGraphicsContext currentContext] saveGraphicsState];
 		[self drawAvatarOfCell:cell];
 		[[NSGraphicsContext currentContext] restoreGraphicsState];
@@ -1323,6 +1349,9 @@ static NSString *TLDateSeparatorString(NSDate *date)
 	// Balloons are painted after all avatars so a long transcript never
 	// lets a bubble overlap a neighbouring picture.
 	for (TLBubbleCell *cell in _cells) {
+		if (!NSIntersectsRect([self paintRectOfCell:cell], dirtyRect)) {
+			continue;
+		}
 		if (cell->_isTyping) {
 			NSBezierPath *cloud = [self cloudPathInRect:cell->_bubbleRect
 			                                   tailLeft:!cell->_outgoing];
