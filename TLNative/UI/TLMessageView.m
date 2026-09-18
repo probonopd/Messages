@@ -29,7 +29,12 @@
 		_scrollView = [[NSScrollView alloc] initWithFrame:[self bounds]];
 		[_scrollView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
 		[_scrollView setHasVerticalScroller:YES];
-		[_scrollView setAutohidesScrollers:YES];
+		// Autohiding lets the scrollers toggle each other: under a fractional
+		// UI scale the pixel-aligned clip view ends up a fraction narrower
+		// than the width-tracking transcript, which summons a horizontal
+		// scroller, which shortens the clip view, which summons the vertical
+		// one, and so on until the stack overflows.
+		[_scrollView setAutohidesScrollers:NO];
 		[_scrollView setBorderType:NSBezelBorder];
 
 		// The clip view must report bounds changes so scrolling to the very
