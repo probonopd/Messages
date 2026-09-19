@@ -17,12 +17,52 @@
 @interface MSGChannelOutlineView : NSOutlineView
 {
 	__unsafe_unretained id _menuOwner;
+	BOOL _fittingColumn;
 }
 @property (nonatomic, assign) id menuOwner;
 @end
 
 @implementation MSGChannelOutlineView
 @synthesize menuOwner = _menuOwner;
+
+// The clip view paints nothing where the table does not reach, and
+// scrolling copies whatever is left there, so at a fractional scale factor
+// stale pixels smear into streaks. The one column therefore always spans
+// the clip view; long names are truncated instead of scrolling sideways.
+- (void)fitColumnToClipView
+{
+	NSClipView *clip = (NSClipView *)[self superview];
+	NSArray *columns = [self tableColumns];
+	if (_fittingColumn || clip == nil || [columns count] != 1) {
+		return;
+	}
+	NSTableColumn *column = [columns objectAtIndex:0];
+	_fittingColumn = YES;
+	// Hiding or showing a scroller resizes the clip view again, so repeat
+	// until the width holds; it settles after the scrollers do.
+	for (NSUInteger round = 0; round < 3; round++) {
+		CGFloat width = NSWidth([clip bounds]);
+		if (fabs([column width] - width) <= 0.01) {
+			break;
+		}
+		[column setWidth:width];
+		// The scroll view re-evaluates its autohiding scrollers only here,
+		// so a horizontal scroller from a narrower layout would stay.
+		[[self enclosingScrollView] reflectScrolledClipView:clip];
+	}
+	_fittingColumn = NO;
+}
+
+// The clip view reports every size change here, including the ones from
+// its scrollers appearing or going away. NSTableView's own handling
+// (-sizeLastColumnToFit) measures from the table's frame origin, which
+// under a fractional scale factor leaves the column slightly wider than
+// the clip view and brings the horizontal scroller back, so it is not
+// called for this single-column table.
+- (void)superviewFrameChanged:(NSNotification *)notification
+{
+	[self fitColumnToClipView];
+}
 
 - (NSMenu *)menuForEvent:(NSEvent *)event
 {

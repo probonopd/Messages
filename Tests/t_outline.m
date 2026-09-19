@@ -136,6 +136,18 @@ int main(void)
 	PASS([recorder->clicked count] == 3, "a click below the rows is not");
 	[outline setDelegate:nil];
 
+	// Nothing paints the part of the clip view the table does not cover,
+	// so scrolling would copy stale pixels there; the table must span it.
+	NSClipView *clip = (NSClipView *)[table superview];
+	// The table re-tiles to its columns whenever rows expand or change.
+	[outline setFrameSize:NSMakeSize(320, 400)];
+	[table tile];
+	PASS(fabs(NSWidth([table frame]) - NSWidth([clip bounds])) < 0.01,
+		"the table covers the clip view when the sidebar gets wider");
+	[outline setFrameSize:NSMakeSize(180, 400)];
+	PASS(fabs(NSWidth([table frame]) - NSWidth([clip bounds])) < 0.01,
+		"and when it gets narrower");
+
 	[arp release];
 	return 0;
 }
