@@ -19,6 +19,7 @@
 #import "MSGSoundPlayer.h"
 #import "MSGGroupListController.h"
 #import "MSGApplicationDelegate.h"
+#import "MSGConnectingView.h"
 
 // The window restores one tab, whichever account it belongs to.
 static NSString *const MSGLastChannelScope = @"Messages";
@@ -128,6 +129,10 @@ NSString *const MSGMainWindowSelectedAccountDidChangeNotification =
 	[_splitView addSubview:_messagePane];
 	[_splitView addSubview:_userListView];
 	[contentView addSubview:_splitView];
+	_connectingView = [[MSGConnectingView alloc] initWithFrame:[_splitView frame]];
+	[_connectingView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+	[_connectingView setHidden:YES];
+	[contentView addSubview:_connectingView];
 
 	NSView *bar = [[NSView alloc] initWithFrame:
 		NSMakeRect(0, 0, NSWidth(contentBounds), barHeight)];
@@ -470,6 +475,7 @@ NSString *const MSGMainWindowSelectedAccountDidChangeNotification =
 
 - (void)protocolNetworkListDidChange:(NSNotification *)notification
 {
+	[self updateConnectingView];
 	[_networkOutline reloadData];
 	[self ensureSelectedChannelPopulated];
 	[self setWindowTitle];
@@ -657,8 +663,27 @@ NSString *const MSGMainWindowSelectedAccountDidChangeNotification =
 
 // One line for all accounts: the first one that is not ready speaks for
 // the rest, because that is the one the user may have to act on.
+- (void)updateConnectingView
+{
+	NSString *message = [MSGConnectingView messageForAccounts:_manager.accounts
+		hasNetworks:[_manager.combinedState.networks count] > 0];
+	if (message != nil) {
+		[_connectingView setMessage:message];
+	}
+	// Swapped rather than overlaid: GNUstep does not draw overlapping
+	// siblings in a fixed order, so the transcript would paint over it.
+	if ([_connectingView isHidden] != (message == nil)) {
+		[_connectingView setHidden:(message == nil)];
+		[_splitView setHidden:(message != nil)];
+		// There is nothing to send to until a conversation exists.
+		[_inputTextView setEditable:(message == nil)];
+		[_sendButton setEnabled:(message == nil)];
+	}
+}
+
 - (void)updateStatusLabel
 {
+	[self updateConnectingView];
 	NSArray *accounts = _manager.accounts;
 	MSGAccount *troubled = nil;
 	for (MSGAccount *account in accounts) {
@@ -1830,6 +1855,7 @@ NSString *const MSGMainWindowSelectedAccountDidChangeNotification =
 {
 	[[NSNotificationCenter defaultCenter] removeObserver:self];
 	[NSObject cancelPreviousPerformRequestsWithTarget:self];
+	[_connectingView release];
 	[_manager release];
 	[_splitView release];
 	[_networkOutline release];

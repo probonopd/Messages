@@ -63,7 +63,7 @@ UI_SRC = $(APP_DIR)/UI/MSGContextMenuBuilder.m
 t_contextmenu_OBJC_FILES = t_contextmenu.m $(UI_SRC) $(MODEL_SRC)
 
 t_accountui_OBJC_FILES = t_accountui.m $(APP_DIR)/UI/MSGAccountMenuSection.m \
-	$(APP_DIR)/UI/MSGSettingsFormView.m
+	$(APP_DIR)/UI/MSGSettingsFormView.m $(APP_DIR)/UI/MSGConnectingView.m
 t_accountui_TOOL_LIBS += -lgnustep-gui
 
 t_outline_OBJC_FILES = t_outline.m $(APP_DIR)/UI/MSGNetworkOutlineView.m \

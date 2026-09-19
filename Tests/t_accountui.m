@@ -15,6 +15,29 @@
 #import "MSGSettingsFormView.h"
 #import "MSGBackend.h"
 #import "MSGProtocol.h"
+#import "MSGAccount.h"
+#import "MSGConnectingView.h"
+
+// An account whose connection state and name the test sets directly.
+@interface StubAccount : MSGAccount
+@property (nonatomic, assign) MSGConnectionState stubState;
+@property (nonatomic, copy) NSString *stubName;
+@end
+
+@implementation StubAccount
+- (MSGConnectionState)state { return _stubState; }
+- (NSString *)displayName { return _stubName; }
+- (void)dealloc { [_stubName release]; [super dealloc]; }
+@end
+
+static StubAccount *Stub(NSString *name, MSGConnectionState state)
+{
+	StubAccount *a = [[[StubAccount alloc] initWithIdentifier:name settings:@{}]
+		autorelease];
+	a.stubName = name;
+	a.stubState = state;
+	return a;
+}
 
 static NSArray *Titles(NSArray *items)
 {
@@ -130,6 +153,53 @@ int main(void)
 	PASS(changes == 1, "edits are announced for dirty tracking");
 	[[NSNotificationCenter defaultCenter] removeObserver:observer];
 	END_SET("settings form")
+
+	START_SET("connecting screen")
+	StubAccount *relay = Stub(@"relay.example", MSGConnectionStateConnecting);
+	StubAccount *core = Stub(@"me@core", MSGConnectionStateAuthenticating);
+	StubAccount *offline = Stub(@"old", MSGConnectionStateDisconnected);
+	StubAccount *failed = Stub(@"bad", MSGConnectionStateConnectionError);
+	StubAccount *retry = Stub(@"flaky", MSGConnectionStateReconnecting);
+
+	NSArray *one = @[relay];
+	PASS_EQUAL([MSGConnectingView messageForAccounts:one hasNetworks:NO],
+		@"Connecting to relay.example…", "one account names it");
+	NSArray *oneLoading = @[core, offline];
+	PASS_EQUAL([MSGConnectingView messageForAccounts:oneLoading hasNetworks:NO],
+		@"Connecting to me@core…", "idle accounts do not count");
+	NSArray *two = @[relay, core];
+	PASS_EQUAL([MSGConnectingView messageForAccounts:two hasNetworks:NO],
+		@"Connecting…", "several accounts are summarized");
+	NSArray *retrying = @[retry];
+	PASS_EQUAL([MSGConnectingView messageForAccounts:retrying hasNetworks:NO],
+		@"Reconnecting to flaky…", "a retry says so");
+	PASS([MSGConnectingView messageForAccounts:one hasNetworks:YES] == nil,
+		"hidden once something is in the sidebar");
+	NSArray *idle = @[offline, failed];
+	PASS([MSGConnectingView messageForAccounts:idle hasNetworks:NO] == nil,
+		"hidden when nothing is connecting");
+	PASS([MSGConnectingView messageForAccounts:@[] hasNetworks:NO] == nil,
+		"hidden without accounts");
+
+	MSGConnectingView *view = [[[MSGConnectingView alloc]
+		initWithFrame:NSMakeRect(0, 0, 500, 300)] autorelease];
+	[view setMessage:@"Connecting…"];
+	PASS([view progressIndicator] != nil && [[view progressIndicator] isIndeterminate],
+		"the progress bar is indeterminate");
+	PASS([[view progressIndicator] style] == NSProgressIndicatorBarStyle,
+		"it is a bar, not a spinner");
+	NSRect bar = [[view progressIndicator] frame];
+	PASS(fabs(NSMidX(bar) - 250.0) < 1.0, "the bar is centered horizontally");
+	[view setFrameSize:NSMakeSize(800, 600)];
+	bar = [[view progressIndicator] frame];
+	PASS(fabs(NSMidX(bar) - 400.0) < 1.0 && fabs(NSMidY(bar) - 300.0) < 40.0,
+		"it stays centered when the window grows");
+	// Autoresizing goes through -setFrame:, which does not call
+	// -setFrameSize: on GNUstep.
+	[view setFrame:NSMakeRect(0, 0, 640, 377)];
+	bar = [[view progressIndicator] frame];
+	PASS(fabs(NSMidX(bar) - 320.0) < 1.0, "it stays centered after setFrame:");
+	END_SET("connecting screen")
 
 	[arp release];
 	return 0;

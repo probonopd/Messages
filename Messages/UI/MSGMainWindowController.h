@@ -18,6 +18,7 @@
 extern NSString *const MSGMainWindowSelectedAccountDidChangeNotification;
 @class MSGInputTextView;
 @class MSGDockBadge;
+@class MSGConnectingView;
 @class NSSearchField;
 
 @interface MSGMainWindowController : NSWindowController <NSSplitViewDelegate,
@@ -36,6 +37,8 @@ extern NSString *const MSGMainWindowSelectedAccountDidChangeNotification;
 	NSView *_composerBar;
 	NSButton *_sendButton;
 	NSTextField *_statusLabel;
+	// Covers the sidebar and transcript until the first network arrives.
+	MSGConnectingView *_connectingView;
 	NSInteger _selectedChannelId;
 	NSString *_selectedUserNick;
 	BOOL _loadingHistory;
