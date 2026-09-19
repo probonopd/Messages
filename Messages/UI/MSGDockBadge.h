@@ -10,14 +10,16 @@
 // We declare it locally instead of importing the workspace headers so this
 // app builds without linking gershwin-workspace; the service is reached at
 // runtime over distributed objects and is simply absent when no Dock runs.
+// The methods must stay oneway like the Dock's own declaration: otherwise
+// every badge update waits for the Dock, and a busy Dock stalls the UI.
 @protocol DockService <NSObject>
 
-- (void)setBadgeCount:(int64_t)count;
-- (void)setCountVisible:(BOOL)visible;
-- (void)setProgressValue:(double)value;
-- (void)setProgressVisible:(BOOL)visible;
-- (void)setUrgent:(BOOL)urgent;
-- (void)clearAll;
+- (oneway void)setBadgeCount:(int64_t)count;
+- (oneway void)setCountVisible:(BOOL)visible;
+- (oneway void)setProgressValue:(double)value;
+- (oneway void)setProgressVisible:(BOOL)visible;
+- (oneway void)setUrgent:(BOOL)urgent;
+- (oneway void)clearAll;
 
 @end
 
