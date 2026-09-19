@@ -115,7 +115,9 @@ t_nosterm_nickname_OBJC_FILES = t_nosterm_nickname.m $(PROTO_SRC) $(MODEL_SRC) \
             $(LOUNGE_DIR)/EngineIO/TLEngineIOClient.m $(LOUNGE_DIR)/SocketIO/TLSocketIOClient.m
 t_nosterm_nickname_TOOL_LIBS += -lcurl -lcrypto
 
-# Read-only relay test: connects to #general and prints the last 3 messages.
+# Relay read test: connects to #general and prints the last 3 messages.
+# Publishes a profile for its nickname, so it SKIPs unless
+# TL_NOSTERM_TEST_RELAY names the relay.
 t_nosterm_read_OBJC_FILES = t_nosterm_read.m $(PROTO_SRC) $(MODEL_SRC) \
             $(SIO_SRC) $(EIO_SRC) $(SUPPORT_SRC) \
             $(LOUNGE_DIR)/EngineIO/TLEngineIOClient.m $(LOUNGE_DIR)/SocketIO/TLSocketIOClient.m

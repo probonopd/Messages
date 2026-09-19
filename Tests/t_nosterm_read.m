@@ -6,9 +6,10 @@
 
 // CLI-only read test: connects to the Nosterm relay, subscribes to #general,
 // collects messages, and prints the last 3 with resolved nicknames.
-// No key needed - read-only, no auth required.
+// No key needed, but connecting publishes a profile for the test nickname
+// under a fresh key, so it only runs when the relay is named explicitly:
 //
-//   ./obj/t_nosterm_read
+//   TL_NOSTERM_TEST_RELAY=wss://chat.nosterm.com/relay ./obj/t_nosterm_read
 
 #import <Foundation/Foundation.h>
 #import "Testing.h"
@@ -56,11 +57,13 @@ static BOOL TLWaitFor(BOOL *flag, NSTimeInterval timeout)
 int main(void)
 {
 	@autoreleasepool {
-		NSString *relay = @"wss://chat.nosterm.com/relay";
 		const char *relayEnv = getenv("TL_NOSTERM_TEST_RELAY");
-		if (relayEnv != NULL && relayEnv[0] != '\0') {
-			relay = [NSString stringWithUTF8String:relayEnv];
+		if (relayEnv == NULL || relayEnv[0] == '\0') {
+			printf("SKIP: TL_NOSTERM_TEST_RELAY is not set; "
+			       "live relay read test not run.\n");
+			return 0;
 		}
+		NSString *relay = [NSString stringWithUTF8String:relayEnv];
 
 		[[MSGLogger sharedLogger] setLevel:MSGLogLevelWarning];
 
