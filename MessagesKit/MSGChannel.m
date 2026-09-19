@@ -1,0 +1,327 @@
+/*
+ * Copyright (c) 2026 Simon Peter
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
+#import "MSGChannel.h"
+
+static NSDictionary *MSGChannelTypeMap(void)
+{
+	static NSDictionary *map;
+	if (!map) {
+		// The static outlives the creating autorelease pool, so it must
+		// own its reference (an autoreased literal would dangle).
+		map = [@{
+			@"channel": @(MSGChannelTypeChannel),
+			@"lobby": @(MSGChannelTypeLobby),
+			@"query": @(MSGChannelTypeQuery),
+			@"special": @(MSGChannelTypeSpecial),
+		} retain];
+	}
+	return map;
+}
+
+NSString *MSGChannelTypeToString(MSGChannelType type)
+{
+	for (NSString *key in MSGChannelTypeMap()) {
+		if ([[MSGChannelTypeMap() objectForKey:key] integerValue] == type) {
+			return key;
+		}
+	}
+	return @"channel";
+}
+
+MSGChannelType MSGChannelTypeFromString(NSString *s)
+{
+	NSNumber *n = [MSGChannelTypeMap() objectForKey:s ? s : @"channel"];
+	return n ? [n integerValue] : MSGChannelTypeChannel;
+}
+
+@implementation MSGChannel
+
+- (instancetype)init
+{
+	self = [super init];
+	if (self) {
+		_identifier = 0;
+		_name = @"";
+		_type = MSGChannelTypeChannel;
+		_topic = @"";
+		_key = @"";
+		_unread = 0;
+		_highlight = 0;
+		_unseen = 0;
+		_unseenHighlight = 0;
+		_firstUnread = 0;
+		_muted = NO;
+		_state = MSGChannelStateParted;
+		_specialType = @"";
+		_data = nil;
+		_closed = NO;
+		_numUsers = 0;
+		_totalMessages = 0;
+		_messages = [[NSMutableArray alloc] init];
+		_pendingMessages = [[NSMutableArray alloc] init];
+		_users = [[NSMutableDictionary alloc] init];
+		_metadata = [[NSMutableDictionary alloc] init];
+	}
+	return self;
+}
+
+- (NSInteger)badgeCount
+{
+	if (_muted || _type == MSGChannelTypeLobby) {
+		return 0;
+	}
+	return _unseen;
+}
+
+static id MSGObject(id value)
+{
+	return ([value isKindOfClass:[NSNull class]] || value == nil) ? nil : value;
+}
+
+- (instancetype)initWithDictionary:(NSDictionary *)dict
+{
+	self = [self init];
+	if (self) {
+		if (dict[@"id"]) {
+			_identifier = [dict[@"id"] integerValue];
+		}
+		if (MSGObject(dict[@"name"])) {
+			[self setName:[dict[@"name"] description]];
+		}
+		if (MSGObject(dict[@"type"])) {
+			_type = MSGChannelTypeFromString([dict[@"type"] description]);
+		}
+		if (MSGObject(dict[@"topic"])) {
+			[self setTopic:[dict[@"topic"] description]];
+		}
+		if (MSGObject(dict[@"key"])) {
+			[self setKey:[dict[@"key"] description]];
+		}
+		if (dict[@"unread"]) {
+			_unread = [dict[@"unread"] integerValue];
+		}
+		if (dict[@"highlight"]) {
+			_highlight = [dict[@"highlight"] integerValue];
+		}
+		if (dict[@"firstUnread"]) {
+			_firstUnread = [dict[@"firstUnread"] integerValue];
+		}
+		if (dict[@"muted"]) {
+			_muted = [dict[@"muted"] boolValue];
+		}
+		if (dict[@"state"]) {
+			_state = [dict[@"state"] integerValue];
+		}
+		if (MSGObject(dict[@"special"])) {
+			[self setSpecialType:[dict[@"special"] description]];
+		}
+		if (MSGObject(dict[@"data"])) {
+			[self setData:dict[@"data"]];
+		}
+		if (dict[@"closed"]) {
+			_closed = [dict[@"closed"] boolValue];
+		}
+		if (dict[@"num_users"]) {
+			_numUsers = [dict[@"num_users"] integerValue];
+		}
+		if (dict[@"totalMessages"]) {
+			_totalMessages = [dict[@"totalMessages"] integerValue];
+		}
+		if (dict[@"messages"] && [dict[@"messages"] isKindOfClass:[NSArray class]]) {
+			for (id m in dict[@"messages"]) {
+				if ([m isKindOfClass:[NSDictionary class]]) {
+					[_messages addObject:[[[MSGMessage alloc] initWithDictionary:m] autorelease]];
+				}
+			}
+		}
+		NSArray *known = @[
+			@"id", @"name", @"type", @"topic", @"key", @"unread", @"highlight",
+			@"firstUnread", @"muted", @"state", @"special", @"data", @"closed",
+			@"num_users", @"totalMessages", @"messages"
+		];
+		NSMutableDictionary *rest = [dict mutableCopy];
+		[rest removeObjectsForKeys:known];
+		[_metadata release];
+		_metadata = rest;
+	}
+	return self;
+}
+
+- (MSGUser *)userWithNick:(NSString *)nick
+{
+	return _users[[nick lowercaseString]];
+}
+
+- (void)addUser:(MSGUser *)user
+{
+	if (!user.nick) {
+		return;
+	}
+	_users[[user.nick lowercaseString]] = user;
+}
+
+- (void)removeUserWithNick:(NSString *)nick
+{
+	[_users removeObjectForKey:[nick lowercaseString]];
+}
+
+- (MSGUser *)uniqueUserWithNickPrefix:(NSString *)prefix
+{
+	if ([prefix length] == 0) {
+		return nil;
+	}
+	NSString *lower = [prefix lowercaseString];
+	MSGUser *match = nil;
+	BOOL ambiguous = NO;
+	for (MSGUser *user in [_users allValues]) {
+		if ([[user.nick lowercaseString] hasPrefix:lower]) {
+			if (match != nil) {
+				ambiguous = YES;
+				break;
+			}
+			match = user;
+		}
+	}
+	return ambiguous ? nil : match;
+}
+
+- (NSArray<MSGUser *> *)sortedUsers
+{
+	NSArray *all = [_users allValues];
+	NSArray *modesOrder = @[@"o", @"v", @"h", @"q", @"a"];
+	NSMutableArray *arr = [all sortedArrayUsingComparator:^NSComparisonResult(id a, id b) {
+		MSGUser *ua = a;
+		MSGUser *ub = b;
+		NSInteger ia = [modesOrder indexOfObject:ua.mode];
+		NSInteger ib = [modesOrder indexOfObject:ub.mode];
+		if (ia == NSNotFound) {
+			ia = [modesOrder count];
+		}
+		if (ib == NSNotFound) {
+			ib = [modesOrder count];
+		}
+		if (ia != ib) {
+			return ia < ib ? NSOrderedAscending : NSOrderedDescending;
+		}
+		return [ua.nick localizedCaseInsensitiveCompare:ub.nick];
+	}].mutableCopy;
+	return arr;
+}
+
+- (MSGMessage *)messageWithIdentifier:(NSInteger)identifier
+{
+	for (MSGMessage *m in _messages) {
+		if (m.identifier == identifier) {
+			return m;
+		}
+	}
+	return nil;
+}
+
+- (void)addMessage:(MSGMessage *)message
+{
+	MSGMessage *existing = [self messageWithIdentifier:message.identifier];
+	if (existing) {
+		NSInteger idx = [_messages indexOfObject:existing];
+		[_messages replaceObjectAtIndex:idx withObject:message];
+		return;
+	}
+	// Keep the transcript ordered by timestamp ascending (oldest at the top,
+	// newest at the bottom, like IRC). Nostr relays may deliver a historical
+	// backfill subscription newest-first, so insert at the correct position
+	// rather than always appending.
+	NSInteger insertIdx = (NSInteger)[_messages count];
+	if (message.timestamp != nil) {
+		for (NSInteger i = 0; i < (NSInteger)[_messages count]; i++) {
+			MSGMessage *other = _messages[i];
+			if ([message.timestamp compare:[other timestamp]] == NSOrderedAscending) {
+				insertIdx = i;
+				break;
+			}
+		}
+	}
+	[_messages insertObject:message atIndex:insertIdx];
+}
+
+- (void)removeMessageWithIdentifier:(NSInteger)identifier
+{
+	MSGMessage *existing = [self messageWithIdentifier:identifier];
+	if (existing) {
+		[_messages removeObject:existing];
+	}
+}
+
+- (void)prependMessages:(NSArray<MSGMessage *> *)messages
+{
+	NSMutableArray *newMessages = [[NSMutableArray alloc] init];
+	for (MSGMessage *m in messages) {
+		MSGMessage *existing = [self messageWithIdentifier:m.identifier];
+		if (!existing) {
+			[newMessages addObject:m];
+		}
+	}
+	[newMessages addObjectsFromArray:_messages];
+	[_messages release];
+	_messages = newMessages;
+}
+
+- (BOOL)isChannel
+{
+	return _type == MSGChannelTypeChannel;
+}
+
+- (BOOL)isQuery
+{
+	return _type == MSGChannelTypeQuery;
+}
+
+- (BOOL)isLobby
+{
+	return _type == MSGChannelTypeLobby;
+}
+
+- (BOOL)isVisibleInOutline
+{
+	if (_closed) {
+		return NO;
+	}
+	if (_type == MSGChannelTypeLobby) {
+		return NO;
+	}
+	if (_type == MSGChannelTypeQuery) {
+		return YES;
+	}
+	return _state == MSGChannelStateJoined;
+}
+
+- (NSString *)description
+{
+	return [NSString stringWithFormat:@"<MSGChannel %ld %@ (%@)>", (long)_identifier, _name,
+		MSGChannelTypeToString(_type)];
+}
+
+- (void)addPendingMessage:(MSGMessage *)message
+{
+	[_pendingMessages addObject:message];
+}
+
+- (void)removePendingMessage:(MSGMessage *)message
+{
+	[_pendingMessages removeObject:message];
+}
+
+- (void)removeAllPendingMessages
+{
+	[_pendingMessages removeAllObjects];
+}
+
+- (BOOL)hasPendingMessages
+{
+	return [_pendingMessages count] > 0;
+}
+
+@end

@@ -1,10 +1,12 @@
-# The Lounge
+# Messages
 
-The Lounge is a native GNUstep desktop client for
-[The Lounge](https://thelounge.chat/), a self-hosted IRC bouncer. It speaks
-the same client/server protocol as the The Lounge web client, so it connects
-to an existing The Lounge installation and never connects to IRC networks
-directly.
+Messages is a native GNUstep chat and messaging client. Its first backend
+talks to [The Lounge](https://thelounge.chat/), a self-hosted IRC bouncer,
+using the same client/server protocol as the The Lounge web client, so it
+connects to an existing The Lounge installation and never connects to IRC
+networks directly. Further backends connect to Nosterm (NOSTR relays) and to
+Quassel cores; several accounts of any backends can be used at the same
+time. Each backend is a loadable bundle; see `ARCHITECTURE.md`.
 
 It is written in Objective-C and built entirely from native GNUstep/AppKit
 components. There is **no embedded browser, WebKit, WebView, or JavaScript
@@ -44,17 +46,19 @@ Known limitations:
 - clang (Objective-C compiler).
 - libcurl 8.x with WebSocket support (`ws`/`wss` protocols, `curl_ws_send` /
   `curl_ws_recv`). Verified: libcurl 8.14.1.
-- A running The Lounge server, 4.5.x or compatible.
+- zlib (Quassel backend), OpenSSL libcrypto (Nosterm backend).
+- A server to talk to: The Lounge 4.5.x, a NOSTR relay, or a Quassel core.
 
 ## Build
 
 ```sh
 source /System/Library/Makefiles/GNUstep.sh
-cd TLNative
 make
 ```
 
-The build must complete with zero warnings.
+The top-level GNUmakefile builds, in order, `MessagesKit.framework`, the
+backend bundles in `Backends/` and `Messages.app`, which copies the bundles
+into its `PlugIns` folder. The build must complete with zero warnings.
 
 ## Install
 
@@ -62,55 +66,63 @@ The build must complete with zero warnings.
 sudo make install GNUSTEP_INSTALLATION_DOMAIN=SYSTEM
 ```
 
-The GNUmakefile pins `GNUSTEP_INSTALLATION_DOMAIN = SYSTEM`; nothing may be
-installed to the LOCAL domain. After installing, verify there are no
+This installs `MessagesKit.framework` and `Messages.app` (with its backends)
+into the SYSTEM domain. The GNUmakefiles pin
+`GNUSTEP_INSTALLATION_DOMAIN = SYSTEM`; nothing may be installed to the LOCAL
+domain. After installing, verify there are no
 leftovers under `/Local/Applications` or `/Local/Library`.
 
-The bundle directory stays `TheLounge.app` (gnustep-make does not accept
-spaces in APP_NAME); the user-visible application name is set to
-"The Lounge" via `ApplicationName`/`CFBundleName` in the Info.plist, which
-also feeds the generated `.desktop` entry.
+The application bundle is `Messages.app`; `ApplicationName`/`CFBundleName`
+in `MessagesInfo.plist` also feed the generated `.desktop` entry.
 
 ## Run
 
 ```sh
-openapp TheLounge
+openapp Messages
 ```
 
 or directly:
 
 ```sh
-/System/Applications/TheLounge.app/TheLounge
+/System/Applications/Messages.app/Messages
 ```
 
-First run: enter the server URL (for example
-`https://lounge.example.net/`), your The Lounge username and password, and
-press Connect. On success the login window closes and the chat window opens.
-On later runs the connection fields are pre-filled and the stored session
-token authenticates without a password.
+First run: the New Account panel opens. Pick the service (The Lounge,
+Nosterm Relay or Quassel Core), fill in the fields the service asks for and
+press Connect; the panel closes once the account is connected. More accounts
+are added with Chat > New Account; Chat > Edit Account and Remove Account act
+on the account of the selected network. Accounts are stored in
+`~/Library/ApplicationSupport/Messages/accounts.plist` and reconnect on the
+next launch; a The Lounge password is traded for a session token at the
+first login and not kept.
 
 ## Tests
 
-Unit tests live in `TLNative/Tests`. Build and run them:
+Tests live in `Tests/` and build against the framework and backends of this
+tree, so build from the top first:
 
 ```sh
-cd TLNative/Tests
 make
+cd Tests
+make
+export LD_LIBRARY_PATH=$PWD/../MessagesKit/MessagesKit.framework/Versions/Current
+./obj/t_accounts   # backend registry, account id slots, routing, persistence
+./obj/t_quassel    # Quassel backend against Fixtures/quassel_mockcore.py
 ./obj/t_model      # model objects and wire parsing
 ./obj/t_engineio   # Engine.IO packets
 ./obj/t_socketio   # Socket.IO packets
-./obj/t_protocol   # event dispatch, model updates, reconciliation
+./obj/t_protocol   # The Lounge event dispatch, model updates, reconciliation
 ./obj/t_session    # live end-to-end session against a real server
 ```
 
-`t_model`, `t_engineio`, `t_socketio` and `t_protocol` are offline parser
-tests; `t_session` connects to a configured The Lounge server and runs a
-full connect/auth/init/message cycle (server URL configurable at the top of
-the file). See COMPATIBILITY.md for the servers tested.
+`t_quassel` starts a local mock Quassel core (needs python3) and needs no
+other network. `t_session` and the `t_nosterm_*` live tests connect to real
+servers (configured in the files or the environment). See COMPATIBILITY.md
+for the servers tested.
 
 ## Developer tool
 
-`TLNative/Tools/thelounge-protocol-dump` connects to a The Lounge server and
+`Tools/thelounge-protocol-dump` connects to a The Lounge server and
 prints each Engine.IO packet, Socket.IO packet, event name and decoded
 payload, with authentication fields redacted automatically:
 
@@ -123,24 +135,27 @@ Development and regression testing only; not part of the shipped app.
 
 ## Architecture
 
-Four layers (details in ARCHITECTURE.md):
+Three parts (details in ARCHITECTURE.md):
 
-1. **GNUstep UI (AppKit)** - login window, main window (network outline,
-   message view, user list, input bar), menus. The UI never touches raw
-   packets; it observes model notifications only.
-2. **Application model** - `TLServerState`, `TLClientState`, `TLNetwork`,
-   `TLChannel`, `TLUser`, `TLMessage`. Mutations happen on the main thread.
-3. **Protocol adapter** - `TLoungeProtocol_4_5` pins The Lounge 4.5 behavior;
-   `TLoungeSession` owns connection lifecycle, authentication state,
-   reconnect/backoff and token persistence.
-4. **Transport** - `TLSocketIOClient` (Socket.IO v5), `TLEngineIOClient`
-   (Engine.IO v4) and `TLWebSocketTransport` (libcurl `CURLWS`). All I/O on
-   one dedicated network thread; sends serialized through a queue; inbound
-   events marshalled to the main thread.
+1. **Messages.app** (`Messages/`) - AppKit UI: account panel, main window
+   (network outline, message view, user list, input bar), menus. The UI
+   never touches raw packets and never imports a backend header; it
+   observes model notifications and asks accounts for their capabilities.
+2. **MessagesKit.framework** (`MessagesKit/`) - the model (`MSGNetwork`,
+   `MSGChannel`, `MSGMessage`, `MSGUser`, ...), the backend API
+   (`MSGBackend`, `MSGAccount`, `MSGProtocol`), `MSGAccountManager`
+   (accounts, persistence, id slots, routing) and the shared libcurl
+   WebSocket transport.
+3. **Backends** (`Backends/*/`, `.msgbackend` bundles loaded from
+   `Messages.app/PlugIns`) - The Lounge (Socket.IO over WebSocket), Nosterm
+   (NOSTR relays), Quassel (the iQuassel protocol engine, GPL-3.0).
 
-Security: TLS verification always on, no JavaScript anywhere, passwords and
-tokens never written to logs or property lists (the token file is chmod
-0600).
+Security: TLS verification always on for The Lounge and Nosterm, no
+JavaScript anywhere, passwords and tokens never written to logs. The
+account list holds the The Lounge session token and the Quassel password
+(the legacy Quassel protocol has no tokens); it is written with mode 0600 in
+a 0700 directory. Quassel cores are commonly self-signed, so the Quassel
+backend does not verify the core's certificate chain, as iQuassel does.
 
 ## Documentation
 

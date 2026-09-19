@@ -126,3 +126,13 @@ the pinned 4.5.0 study target) for connection, auth, and initialization.
 No messaging, history, or reconnection exchange over a live server has been
 exercised yet; the reference pins The Lounge 4.5.0 (commit `dd2108fa`), and
 no other major release has been tested.
+## Quassel
+
+Tested only against `Tests/Fixtures/quassel_mockcore.py`, a mock core that
+speaks the legacy Quassel protocol without TLS or compression (`t_quassel`
+and a manual run of Messages.app): login and login rejection, session init
+with two networks, member lists, backlog paging to the start of a buffer,
+live messages and sending. No real Quassel core has been tested yet; TLS
+(STARTTLS through `GSTLSSession`) and compressed sessions are therefore
+unverified, as is the newer "datastream" protocol, which the backend does
+not speak.

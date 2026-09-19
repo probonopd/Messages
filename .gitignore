@@ -3,3 +3,7 @@ obj/
 *~
 *.swp
 .DS_Store
+*.framework/
+*.msgbackend/
+derived_src/
+__pycache__/
