@@ -5,8 +5,9 @@
  */
 
 /* t_outline.m - selection in the network outline stays on the item the
- * window shows while rows are added above it (another account loading).
- * Headless AppKit. */
+ * window shows while rows are added above it (another account loading),
+ * and clicks on rows are reported so the window can move the cursor to the
+ * composer. Headless AppKit. */
 
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
@@ -35,6 +36,58 @@ static MSGNetwork *Network(NSString *uuid, NSInteger lobbyId)
 	channel.state = MSGChannelStateJoined;
 	[network addChannel:channel];
 	return network;
+}
+
+// Records what the outline reports.
+@interface ClickRecorder : NSObject <MSGNetworkOutlineViewDelegate>
+{
+@public
+	NSMutableArray *clicked;
+}
+@end
+
+@implementation ClickRecorder
+- (id)init
+{
+	if ((self = [super init])) {
+		clicked = [NSMutableArray new];
+	}
+	return self;
+}
+- (void)dealloc
+{
+	[clicked release];
+	[super dealloc];
+}
+- (void)networkOutlineView:(MSGNetworkOutlineView *)outline didSelectChannelId:(NSInteger)channelId
+{
+}
+- (void)networkOutlineView:(MSGNetworkOutlineView *)outline didClickItem:(id)item
+{
+	[clicked addObject:item];
+}
+@end
+
+static NSOutlineView *InnerOutline(NSView *view)
+{
+	if ([view isKindOfClass:[NSOutlineView class]]) {
+		return (NSOutlineView *)view;
+	}
+	for (NSView *sub in [view subviews]) {
+		NSOutlineView *found = InnerOutline(sub);
+		if (found) {
+			return found;
+		}
+	}
+	return nil;
+}
+
+// What the table does at the end of a real click: the clicked row is only
+// set while a mouse event is handled, so the test sets it the same way.
+static void Click(NSOutlineView *table, NSInteger row)
+{
+	[table setValue:@(row) forKey:@"_clickedRow"];
+	[NSApp sendAction:[table action] to:[table target] from:table];
 }
 
 int main(void)
@@ -66,6 +119,22 @@ int main(void)
 	MSGChannel *selected = [outline selectedItem];
 	PASS([selected isKindOfClass:[MSGChannel class]] && selected.identifier == 21,
 		"channels select their own row");
+
+	ClickRecorder *recorder = [[ClickRecorder new] autorelease];
+	[outline setDelegate:recorder];
+	NSOutlineView *table = InnerOutline(outline);
+	NSInteger relayRow = [table rowForItem:relay];
+	NSInteger generalRow = [table rowForItem:[quassel channelWithIdentifier:11]];
+	Click(table, relayRow);
+	Click(table, generalRow);
+	Click(table, generalRow);
+	NSArray *expected = @[relay, [quassel channelWithIdentifier:11],
+		[quassel channelWithIdentifier:11]];
+	PASS_EQUAL(recorder->clicked, expected,
+		"every click on a server or channel row is reported, also on the selected one");
+	Click(table, -1);
+	PASS([recorder->clicked count] == 3, "a click below the rows is not");
+	[outline setDelegate:nil];
 
 	[arp release];
 	return 0;

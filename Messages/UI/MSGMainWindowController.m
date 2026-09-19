@@ -129,7 +129,9 @@ NSString *const MSGMainWindowSelectedAccountDidChangeNotification =
 	[_splitView addSubview:_messagePane];
 	[_splitView addSubview:_userListView];
 	[contentView addSubview:_splitView];
-	_connectingView = [[MSGConnectingView alloc] initWithFrame:[_splitView frame]];
+	// Covers the composer too: there is nothing to type into until a
+	// conversation exists.
+	_connectingView = [[MSGConnectingView alloc] initWithFrame:contentBounds];
 	[_connectingView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
 	[_connectingView setHidden:YES];
 	[contentView addSubview:_connectingView];
@@ -675,9 +677,12 @@ NSString *const MSGMainWindowSelectedAccountDidChangeNotification =
 	if ([_connectingView isHidden] != (message == nil)) {
 		[_connectingView setHidden:(message == nil)];
 		[_splitView setHidden:(message != nil)];
-		// There is nothing to send to until a conversation exists.
+		[_composerBar setHidden:(message != nil)];
 		[_inputTextView setEditable:(message == nil)];
 		[_sendButton setEnabled:(message == nil)];
+		if (message == nil) {
+			[[self window] makeFirstResponder:_inputTextView];
+		}
 	}
 }
 
@@ -1097,6 +1102,15 @@ NSString *const MSGMainWindowSelectedAccountDidChangeNotification =
 - (void)networkOutlineView:(MSGNetworkOutlineView *)outline didSelectChannelId:(NSInteger)channelId
 {
 	[self selectChannelId:channelId];
+}
+
+// Picking a conversation with the mouse means the user wants to write in
+// it; keyboard navigation in the sidebar keeps its focus.
+- (void)networkOutlineView:(MSGNetworkOutlineView *)outline didClickItem:(id)item
+{
+	if ([_inputTextView isEditable]) {
+		[[self window] makeFirstResponder:_inputTextView];
+	}
 }
 
 - (NSMenu *)networkOutlineView:(MSGNetworkOutlineView *)outline contextMenuForRowItem:(id)item

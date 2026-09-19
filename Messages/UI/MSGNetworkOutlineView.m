@@ -86,6 +86,10 @@
 		[_outlineView setDataSource:self];
 		[_outlineView setDelegate:self];
 		[_outlineView setAllowsMultipleSelection:NO];
+		// The action fires for clicks only, never for arrow keys, so the
+		// window can react to a click without breaking keyboard navigation.
+		[_outlineView setTarget:self];
+		[_outlineView setAction:@selector(rowClicked:)];
 		[_scrollView setDocumentView:_outlineView];
 		[column release];
 
@@ -302,6 +306,21 @@
 	// (the lobby), not just expanded.
 	return [item isKindOfClass:[MSGNetwork class]] ||
 		[item isKindOfClass:[MSGChannel class]];
+}
+
+- (void)rowClicked:(id)sender
+{
+	NSInteger row = [_outlineView clickedRow];
+	if (row < 0) {
+		return;
+	}
+	id item = [_outlineView itemAtRow:row];
+	if (![self outlineView:_outlineView shouldSelectItem:item]) {
+		return;
+	}
+	if ([_delegate respondsToSelector:@selector(networkOutlineView:didClickItem:)]) {
+		[_delegate networkOutlineView:self didClickItem:item];
+	}
 }
 
 - (void)outlineViewSelectionDidChange:(NSNotification *)notification

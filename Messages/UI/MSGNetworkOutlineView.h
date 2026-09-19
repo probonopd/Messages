@@ -14,6 +14,9 @@
 @optional
 // Returned menu is popped up at the mouse; item is a MSGNetwork or MSGChannel.
 - (NSMenu *)networkOutlineView:(MSGNetworkOutlineView *)outline contextMenuForRowItem:(id)item;
+// A server or channel row was clicked, also when it was already selected;
+// item is a MSGNetwork or MSGChannel.
+- (void)networkOutlineView:(MSGNetworkOutlineView *)outline didClickItem:(id)item;
 @end
 
 // The GNUstep data source/delegate protocols do not mark their optional
