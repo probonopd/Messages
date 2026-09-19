@@ -1,4 +1,5 @@
 // Dual-Licensed, GPLv3 and Woboq GmbH's private license. See file "LICENSE"
+// Modified for Messages (2026): byte order uses Foundation's NSSwap* functions.
 
 #import "Message.h"
 #import "BufferInfo.h"
@@ -24,11 +25,11 @@
     offset += 4;  
     
     //ret.timestamp = new Date(stream.readUInt(32) * 1000);
-    messageDate = [NSDate dateWithTimeIntervalSince1970:CFSwapInt32BigToHost(*(int*)([s bytes] + offset))];
+    messageDate = [NSDate dateWithTimeIntervalSince1970:NSSwapBigIntToHost(*(int*)([s bytes] + offset))];
     offset += 4;
     
     //ret.type = IrcMessage.Type.getForValue((int) stream.readUInt(32));
-    messageType = CFSwapInt32BigToHost(*(int*)([s bytes] + offset));
+    messageType = NSSwapBigIntToHost(*(int*)([s bytes] + offset));
     offset += 4;
     
     //ret.flags = stream.readByte();

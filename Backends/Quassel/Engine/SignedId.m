@@ -1,4 +1,5 @@
 // Dual-Licensed, GPLv3 and Woboq GmbH's private license. See file "LICENSE"
+// Modified for Messages (2026): byte order uses Foundation's NSSwap* functions.
 
 #import "SignedId.h"
 #import <objc/runtime.h>
@@ -21,7 +22,7 @@
 - (id) initWithSerialization:(const char*)bytes;
 {
     self = [super init];
-    i = CFSwapInt32BigToHost(*(int*)(bytes));
+    i = NSSwapBigIntToHost(*(int*)(bytes));
     return self;
 }
 
@@ -51,7 +52,7 @@
 
 - (void) serialize:(NSMutableData*)data
 {
-    int networkByteId = CFSwapInt32HostToBig(i);
+    int networkByteId = NSSwapHostIntToBig(i);
     [data appendBytes:(char*)&networkByteId length:4];
 }
 

@@ -329,6 +329,23 @@ int main(void)
 	[fm removeItemAtPath:path error:NULL];
 	END_SET("persistence")
 
+	START_SET("connect at launch")
+	NSString *path = TempPath(@"launch");
+	[fm removeItemAtPath:path error:NULL];
+	MSGAccountManager *manager = NewManager(path);
+	MSGAccount *on = [manager addAccountWithBackend:@"test.fake"
+		settings:@{@"url": @"a"} error:NULL];
+	MSGAccount *off = [manager addAccountWithBackend:@"test.fake"
+		settings:@{@"url": @"b", MSGAccountConnectAtLaunchKey: @NO} error:NULL];
+	PASS([on connectsAtLaunch] && ![off connectsAtLaunch],
+		"accounts connect at launch unless told not to");
+	[manager connectAccountsForLaunch];
+	PASS(on.state == MSGConnectionStateConnecting, "enabled account connects");
+	PASS(off.state == MSGConnectionStateDisconnected, "disabled account stays offline");
+	[manager release];
+	[fm removeItemAtPath:path error:NULL];
+	END_SET("connect at launch")
+
 	[arp release];
 	return 0;
 }

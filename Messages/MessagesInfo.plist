@@ -1,34 +1,15 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="0.9">
-<dict>
-	<key>CFBundleName</key>
-	<string>Messages</string>
-	<key>CFBundleDisplayName</key>
-	<string>Messages</string>
-	<key>ApplicationName</key>
-	<string>Messages</string>
-	<key>CFBundleIdentifier</key>
-	<string>io.github.gershwin-desktop.Messages</string>
-	<key>CFBundleExecutable</key>
-	<string>Messages</string>
-	<key>CFBundleVersion</key>
-	<string>0.1.0</string>
-	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleSignature</key>
-	<string>????</string>
-	<key>CFBundleIconFile</key>
-	<string>Messages.png</string>
-	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
-	<key>URL</key>
-	<string>https://github.com/probonopd/TheLounge</string>
-	<key>NSHumanReadableCopyright</key>
-	<string>Copyright (c) 2026 Simon Peter. All rights reserved.</string>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-</dict>
-</plist>
+{
+	ApplicationName = Messages;
+	CFBundleName = Messages;
+	CFBundleDisplayName = Messages;
+	CFBundleIdentifier = "io.github.gershwin-desktop.Messages";
+	CFBundleExecutable = Messages;
+	CFBundleVersion = "0.1.0";
+	CFBundleShortVersionString = "0.1.0";
+	CFBundlePackageType = APPL;
+	CFBundleSignature = "????";
+	CFBundleIconFile = "Messages.png";
+	NSPrincipalClass = NSApplication;
+	URL = "https://github.com/probonopd/Messages";
+	NSHumanReadableCopyright = "Copyright (c) 2026 Simon Peter. BSD-2-Clause. The Quassel backend contains GPL-3.0 code from iQuassel (Woboq GmbH and contributors) and its GNUstep port (pkgdemon).";
+}

@@ -90,11 +90,20 @@ or directly:
 First run: the New Account panel opens. Pick the service (The Lounge,
 Nosterm Relay or Quassel Core), fill in the fields the service asks for and
 press Connect; the panel closes once the account is connected. More accounts
-are added with Chat > New Account; Chat > Edit Account and Remove Account act
-on the account of the selected network. Accounts are stored in
-`~/Library/ApplicationSupport/Messages/accounts.plist` and reconnect on the
-next launch; a The Lounge password is traded for a session token at the
-first login and not kept.
+are added with File > New Account. Messages > Preferences > Accounts lists
+every account and edits it (Apply reconnects it with the new settings;
+"Connect when Messages starts" controls the launch); Account > Account
+Settings opens it for the account of the selected network. Accounts are
+stored in `~/Library/ApplicationSupport/Messages/accounts.plist`; a The Lounge
+password is traded for a session token at the first login and not kept.
+
+Menus: Conversation and the top of the Account menu hold what every service
+offers (join, leave, mute, clear history; connect/disconnect, settings,
+remove). Below them the Account menu shows only what the selected
+account's service can do: the IRC commands (channel list, topic, ignore
+and ban lists, a User submenu with operator actions) for The Lounge and
+Quassel, network management for The Lounge, the group list for Nosterm.
+Items that do not apply to the selected channel or user are disabled.
 
 ## Tests
 
@@ -148,7 +157,7 @@ Three parts (details in ARCHITECTURE.md):
    WebSocket transport.
 3. **Backends** (`Backends/*/`, `.msgbackend` bundles loaded from
    `Messages.app/PlugIns`) - The Lounge (Socket.IO over WebSocket), Nosterm
-   (NOSTR relays), Quassel (the iQuassel protocol engine, GPL-3.0).
+   (NOSTR relays), Quassel (the iQuassel protocol engine, GPL-3.0-only).
 
 Security: TLS verification always on for The Lounge and Nosterm, no
 JavaScript anywhere, passwords and tokens never written to logs. The
@@ -156,6 +165,24 @@ account list holds the The Lounge session token and the Quassel password
 (the legacy Quassel protocol has no tokens); it is written with mode 0600 in
 a 0700 directory. Quassel cores are commonly self-signed, so the Quassel
 backend does not verify the core's certificate chain, as iQuassel does.
+
+## License
+
+- Messages, MessagesKit, the The Lounge and Nosterm backends, the tests and
+  tools: BSD-2-Clause (`LICENSE`), Copyright (c) 2026 Simon Peter. Files
+  marked `BSD-2-Clause OR GPL-3.0-or-later` may be used under either license.
+- The Quassel backend (`Backends/Quassel`) contains third-party code from
+  iQuassel (Woboq GmbH and contributors) and its GNUstep port (pkgdemon),
+  used under GPL-3.0-only; so does the test fixture
+  `Tests/Fixtures/quassel_mockcore.py`. See `Backends/Quassel/LICENSE` and
+  `Backends/Quassel/COPYING`.
+- A built `Messages.app` includes `Quassel.msgbackend`, so that app as a
+  whole is distributed under the terms of the GPL version 3; the
+  BSD-2-Clause code in it stays available under BSD-2-Clause on its own.
+- Libraries linked at run time: GNUstep Base and GUI (LGPL-2.1-or-later),
+  libcurl (curl license), OpenSSL libcrypto (Apache-2.0; Nosterm), zlib
+  (zlib license; Quassel), all compatible with the above.
+- The bech32 encoding in the Nosterm backend follows BIP-173.
 
 ## Documentation
 

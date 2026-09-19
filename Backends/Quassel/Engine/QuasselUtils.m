@@ -1,5 +1,6 @@
 // Dual-Licensed, GPLv3 and Woboq GmbH's private license. See file "LICENSE"
-// Modified for Messages (2026): compiler warning fixed (unused format argument).
+// Modified for Messages (2026): compiler warning fixed (unused format argument);
+// byte order uses Foundation's NSSwap* functions.
 
 
 #import "QuasselUtils.h"
@@ -72,7 +73,7 @@
 
 + (NSData*) qUncompress:(const char*) data count:(int)count
 {
-    unsigned int expectedSize = CFSwapInt32BigToHost(*(unsigned int*)data); //(data[0] << 24) | (data[1] << 16) |  (data[2] <<  8) | (data[3]      );
+    unsigned int expectedSize = NSSwapBigIntToHost(*(unsigned int*)data); //(data[0] << 24) | (data[1] << 16) |  (data[2] <<  8) | (data[3]      );
     unsigned long len = MAX(expectedSize, 1ul);
     NSMutableData *baunzip = [NSMutableData dataWithLength:len];
     int res = uncompress((unsigned char*)[baunzip mutableBytes], &len, (unsigned char*)data+4, count-4);

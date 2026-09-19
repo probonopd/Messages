@@ -173,23 +173,25 @@
 - (void)selectChannelId:(NSInteger)channelId
 {
 	_selectedChannelId = channelId;
-	NSInteger row;
-	if (_selectedItemIsNetworkRow) {
-		// The user clicked a network header; keep the highlight there while
-		// showing its lobby instead of jumping down to the lobby row.
-		MSGNetwork *network = _serverState ?
-			[_serverState networkContainingChannel:channelId] : nil;
-		row = network ? [_outlineView rowForItem:network]
-			: [self rowForChannelId:channelId];
-	} else {
-		row = [self rowForChannelId:channelId];
-	}
+	// A lobby has no row of its own; its network's row stands for it.
+	// Looking for a lobby row instead left the old row index selected, and
+	// it ended up on another item once rows were added above it.
+	MSGNetwork *network = [_serverState networkContainingChannel:channelId];
+	NSInteger row = ([[network lobby] identifier] == channelId)
+		? [_outlineView rowForItem:network]
+		: [self rowForChannelId:channelId];
 	if (row >= 0) {
 		if ([_outlineView selectedRow] != row) {
 			[_outlineView selectRowIndexes:[NSIndexSet indexSetWithIndex:
 				(NSUInteger)row] byExtendingSelection:NO];
 		}
 	}
+}
+
+- (id)selectedItem
+{
+	NSInteger row = [_outlineView selectedRow];
+	return row >= 0 ? [_outlineView itemAtRow:row] : nil;
 }
 
 - (NSInteger)rowForChannelId:(NSInteger)channelId
@@ -312,7 +314,6 @@
 	MSGChannel *channel = nil;
 	if ([item isKindOfClass:[MSGNetwork class]]) {
 		channel = [(MSGNetwork *)item lobby];
-		_selectedItemIsNetworkRow = YES;
 		// Clicking a network name clears its server/lobby unread, exactly as
 		// clicking a channel clears that channel's unread. Without this the
 		// count would only reset for the network currently engaged via a
@@ -327,7 +328,6 @@
 		}
 	} else if ([item isKindOfClass:[MSGChannel class]]) {
 		channel = item;
-		_selectedItemIsNetworkRow = NO;
 	}
 	if (!channel) {
 		return;

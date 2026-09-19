@@ -1,16 +1,7 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="0.9">
-<dict>
-	<key>CFBundleIdentifier</key>
-	<string>io.github.gershwin-desktop.Messages.Quassel</string>
-	<key>MSGBackendIdentifier</key>
-	<string>io.github.gershwin-desktop.Messages.Quassel</string>
-	<key>MSGBackendDisplayName</key>
-	<string>Quassel Core</string>
-	<key>MSGBackendAPIVersion</key>
-	<integer>1</integer>
-	<key>NSHumanReadableCopyright</key>
-	<string>Protocol engine from iQuassel (c) Woboq GmbH and contributors, GPL-3.0. See COPYING.</string>
-</dict>
-</plist>
+{
+	CFBundleIdentifier = "io.github.gershwin-desktop.Messages.Quassel";
+	MSGBackendIdentifier = "io.github.gershwin-desktop.Messages.Quassel";
+	MSGBackendDisplayName = "Quassel Core";
+	MSGBackendAPIVersion = 1;
+	NSHumanReadableCopyright = "Protocol engine from iQuassel by Woboq GmbH and contributors, GNUstep port by pkgdemon; GPL-3.0-only, see COPYING and LICENSE.";
+}

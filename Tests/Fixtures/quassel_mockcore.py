@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
+# From the GNUstep port of iQuassel by pkgdemon; see Backends/Quassel/LICENSE.
 """
 mockcore.py -- a minimal Quassel core speaking the LEGACY (pre-2014) protocol.
 

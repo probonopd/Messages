@@ -23,6 +23,9 @@
 // The window restores one tab, whichever account it belongs to.
 static NSString *const MSGLastChannelScope = @"Messages";
 
+NSString *const MSGMainWindowSelectedAccountDidChangeNotification =
+	@"MSGMainWindowSelectedAccountDidChangeNotification";
+
 @implementation MSGMainWindowController
 
 - (instancetype)initWithAccountManager:(MSGAccountManager *)manager
@@ -354,6 +357,7 @@ static NSString *const MSGLastChannelScope = @"Messages";
 	}
 	[self populateViewsForChannel:channel];
 	[self setWindowTitle];
+	[self announceSelectedAccount];
 	// The channel is now on screen, so clear its unread immediately instead
 	// of waiting for the bouncer to echo the reset back.
 	[self markActiveChannelSeen];
@@ -640,6 +644,7 @@ static NSString *const MSGLastChannelScope = @"Messages";
 
 - (void)accountListDidChange:(NSNotification *)notification
 {
+	[self announceSelectedAccount];
 	[_networkOutline reloadData];
 	if (_selectedChannelId > 0 &&
 		[_manager.combinedState channelWithIdentifier:_selectedChannelId] == nil) {
@@ -1085,7 +1090,9 @@ static NSString *const MSGLastChannelScope = @"Messages";
 	}
 	NSString *myNick = network.nick;
 	return [MSGContextMenuBuilder channelMenuForChannel:channel
-		network:network myNick:myNick delegate:self];
+		network:network myNick:myNick
+		capabilities:[[_manager accountForNetwork:network] capabilities]
+		delegate:self];
 }
 
 #pragma mark - MSGUserListViewDelegate
@@ -1131,7 +1138,9 @@ static NSString *const MSGLastChannelScope = @"Messages";
 	}
 	NSString *myNick = network.nick;
 	return [MSGContextMenuBuilder userMenuForUser:[users objectAtIndex:(NSUInteger)row]
-		channel:channel network:network myNick:myNick delegate:self];
+		channel:channel network:network myNick:myNick
+		capabilities:[[_manager accountForNetwork:network] capabilities]
+		delegate:self];
 }
 
 #pragma mark - MSGContextMenuActionDelegate
@@ -1424,18 +1433,47 @@ static NSString *const MSGLastChannelScope = @"Messages";
 	[self contextMenuCloseChannelId:[[network lobby] identifier] isLobby:YES];
 }
 
-- (void)chatEditAccount:(id)sender
+#pragma mark - Account menu actions
+
+- (MSGAccount *)selectedAccount
 {
-	MSGAccount *account = [_manager accountForNetwork:[self currentChatNetwork]];
-	[(MSGApplicationDelegate *)[NSApp delegate] editAccount:account];
+	return [_manager accountForNetwork:[self currentChatNetwork]];
 }
 
-- (void)chatRemoveAccount:(id)sender
+- (void)accountToggleConnection:(id)sender
+{
+	MSGAccount *account = [self selectedAccount];
+	if (account.state == MSGConnectionStateDisconnected ||
+		account.state == MSGConnectionStateAuthenticationFailed ||
+		account.state == MSGConnectionStateProtocolError ||
+		account.state == MSGConnectionStateConnectionError) {
+		[account connect];
+	} else {
+		[account disconnect];
+	}
+}
+
+- (void)accountShowSettings:(id)sender
+{
+	[(MSGApplicationDelegate *)[NSApp delegate] editAccount:[self selectedAccount]];
+}
+
+- (void)accountRemove:(id)sender
 {
 	MSGNetwork *network = [self currentChatNetwork];
 	if (network) {
 		[self contextMenuForgetNetworkForChannelId:[[network lobby] identifier]];
 	}
+}
+
+// Tells the app which account the menus act on, so the Account menu can
+// offer that backend's commands.
+- (void)announceSelectedAccount
+{
+	MSGAccount *account = [self selectedAccount];
+	[[NSNotificationCenter defaultCenter]
+		postNotificationName:MSGMainWindowSelectedAccountDidChangeNotification
+		object:self userInfo:account ? @{@"account": account} : @{}];
 }
 
 - (void)chatJoinChannel:(id)sender
@@ -1617,15 +1655,31 @@ static NSString *const MSGLastChannelScope = @"Messages";
 	MSGCapabilities caps = [[_manager accountForNetwork:network] capabilities];
 	BOOL irc = (caps & MSGCapabilityIRCCommands) != 0;
 
-	if (action == @selector(chatToggleConnection:)) {
-		[menuItem setTitle:network.connected ? @"Disconnect" : @"Connect"];
-		return network != nil && irc;
+	MSGAccount *account = [_manager accountForNetwork:network];
+	BOOL managedNetworks = (caps & MSGCapabilityServerManagedNetworks) != 0;
+
+	if (action == @selector(accountToggleConnection:)) {
+		BOOL offline = account == nil ||
+			account.state == MSGConnectionStateDisconnected ||
+			account.state == MSGConnectionStateAuthenticationFailed ||
+			account.state == MSGConnectionStateProtocolError ||
+			account.state == MSGConnectionStateConnectionError;
+		[menuItem setTitle:offline ? @"Connect" : @"Disconnect"];
+		return account != nil;
 	}
-	if (action == @selector(chatRemoveNetwork:) ||
-		action == @selector(chatJoinChannel:) ||
-		action == @selector(chatEditAccount:) ||
-		action == @selector(chatRemoveAccount:)) {
-		return network != nil;
+	if (action == @selector(accountShowSettings:) ||
+		action == @selector(accountRemove:)) {
+		return account != nil;
+	}
+	if (action == @selector(chatToggleConnection:)) {
+		[menuItem setTitle:network.connected ? @"Disconnect Network" : @"Connect Network"];
+		return network != nil && managedNetworks;
+	}
+	if (action == @selector(chatRemoveNetwork:)) {
+		return network != nil && managedNetworks;
+	}
+	if (action == @selector(chatJoinChannel:)) {
+		return network != nil && [account isConnected];
 	}
 	if (action == @selector(chatListChannels:)) {
 		return network != nil && (irc || (caps & MSGCapabilityGroupDirectory));
@@ -1646,26 +1700,20 @@ static NSString *const MSGLastChannelScope = @"Messages";
 			!(caps & MSGCapabilityMute)) {
 			return NO;
 		}
-		NSString *type = [MSGContextMenuBuilder humanTypeNameForChannel:channel];
+		NSString *type = [[MSGContextMenuBuilder humanTypeNameForChannel:channel]
+			capitalizedString];
 		[menuItem setTitle:[NSString stringWithFormat:
 			channel.muted ? @"Unmute %@" : @"Mute %@", type]];
 		return YES;
 	}
 	if (action == @selector(chatCloseCurrent:)) {
-		if (!channel) {
+		// A network is removed from the Account menu, where the backend
+		// says whether that is possible.
+		if (!channel || [channel isLobby]) {
+			[menuItem setTitle:@"Leave Channel"];
 			return NO;
 		}
-		switch (channel.type) {
-		case MSGChannelTypeChannel:
-			[menuItem setTitle:@"Leave"];
-			break;
-		case MSGChannelTypeLobby:
-			[menuItem setTitle:@"Leave Network"];
-			break;
-		default:
-			[menuItem setTitle:@"Close"];
-			break;
-		}
+		[menuItem setTitle:[channel isChannel] ? @"Leave Channel" : @"Close Conversation"];
 		return YES;
 	}
 

@@ -1,6 +1,10 @@
+# Copyright (c) 2026 Simon Peter
+#
+# SPDX-License-Identifier: BSD-2-Clause
+
 include $(GNUSTEP_MAKEFILES)/common.make
 
-TEST_TOOL_NAME = t_accounts t_quassel t_model t_engineio t_socketio t_protocol t_session t_contextmenu \
+TEST_TOOL_NAME = t_accounts t_accountui t_outline t_quassel t_model t_engineio t_socketio t_protocol t_session t_contextmenu \
                  t_bubbles t_badge t_nostr_crypto t_nosterm_live t_nosterm_catchup \
                  t_nosterm_cleanup t_nosterm_nickname t_nosterm_read
 
@@ -18,7 +22,7 @@ ADDITIONAL_CPPFLAGS += -I$(GNUSTEP_MAKEFILES)/TestFramework \
                        -I$(APP_DIR)/UI -I$(APP_DIR)/Bubbles
 ADDITIONAL_TOOL_LIBS += $(MSGKIT_LIBS)
 # Model properties intentionally mirror The Lounge wire field names
-# (newNick, newIdent, newHost, rawText) which trigger the Cocoa ownership
+# (newNick, newIdent, newHost, rawText) which trigger clang's ownership
 # naming heuristic; the names are correct for this project.
 ADDITIONAL_OBJCFLAGS += -Wno-objc-property-matches-cocoa-ownership-rule
 
@@ -57,6 +61,14 @@ t_session_TOOL_LIBS += -lcurl -lcrypto
 UI_SRC = $(APP_DIR)/UI/MSGContextMenuBuilder.m
 
 t_contextmenu_OBJC_FILES = t_contextmenu.m $(UI_SRC) $(MODEL_SRC)
+
+t_accountui_OBJC_FILES = t_accountui.m $(APP_DIR)/UI/MSGAccountMenuSection.m \
+	$(APP_DIR)/UI/MSGSettingsFormView.m
+t_accountui_TOOL_LIBS += -lgnustep-gui
+
+t_outline_OBJC_FILES = t_outline.m $(APP_DIR)/UI/MSGNetworkOutlineView.m \
+	$(APP_DIR)/UI/MSGChannelBadgeCell.m
+t_outline_TOOL_LIBS += -lgnustep-gui
 t_contextmenu_TOOL_LIBS += -lgnustep-gui
 
 BUBBLE_SRC = $(APP_DIR)/Bubbles/MSGBubbleMessage.m $(APP_DIR)/Bubbles/MSGBubbleTheme.m \

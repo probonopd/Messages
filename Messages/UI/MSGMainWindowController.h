@@ -12,6 +12,10 @@
 #import "MSGContextMenuBuilder.h"
 
 @class MSGAccountManager;
+
+// Posted when the account the menus act on may have changed; userInfo
+// "account" is the account of the selected network, absent when none.
+extern NSString *const MSGMainWindowSelectedAccountDidChangeNotification;
 @class MSGInputTextView;
 @class MSGDockBadge;
 @class NSSearchField;

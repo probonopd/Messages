@@ -331,10 +331,12 @@ static NSError *MSGManagerError(NSString *message)
 
 #pragma mark - Connections
 
-- (void)connectAll
+- (void)connectAccountsForLaunch
 {
 	for (MSGAccount *account in _accounts) {
-		[account connect];
+		if ([account connectsAtLaunch]) {
+			[account connect];
+		}
 	}
 }
 

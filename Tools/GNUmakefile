@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Simon Peter
+#
+# SPDX-License-Identifier: BSD-2-Clause
+
 GNUSTEP_INSTALLATION_DOMAIN = SYSTEM
 
 include $(GNUSTEP_MAKEFILES)/common.make
@@ -13,7 +17,7 @@ thelounge-protocol-dump_OBJC_FILES = thelounge-protocol-dump/main.m \
 
 ADDITIONAL_CPPFLAGS += -I$(LOUNGE_DIR)/EngineIO -I$(LOUNGE_DIR)/SocketIO
 # Model properties intentionally mirror wire field names
-# (newNick, newIdent, newHost, rawText) which trigger the Cocoa ownership
+# (newNick, newIdent, newHost, rawText) which trigger clang's ownership
 # naming heuristic; the names are correct for this project.
 ADDITIONAL_OBJCFLAGS += -Wno-objc-property-matches-cocoa-ownership-rule
 

@@ -1,1 +1,5 @@
+# Copyright (c) 2026 Simon Peter
+#
+# SPDX-License-Identifier: BSD-2-Clause
+
 ADDITIONAL_OBJCFLAGS += -Wno-objc-property-matches-cocoa-ownership-rule

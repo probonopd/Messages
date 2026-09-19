@@ -331,7 +331,8 @@ static EC_GROUP *NTSecp256k1Group(void)
 
 #pragma mark - NIP-19 bech32
 
-// BIP-173 bech32 (lowercase). Nostr uses this alphabet, not bech32m.
+// Bech32 as specified in BIP-173 (lowercase only); Nostr uses this, not
+// bech32m. Algorithm and constants follow the BIP.
 static const char *NT_BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 static const int8_t NT_BECH32_CHARSET_REV[128] = {
 	-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,

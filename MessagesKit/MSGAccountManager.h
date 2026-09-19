@@ -44,7 +44,8 @@ extern const NSInteger MSGAccountIdSlotSize;
 - (BOOL)loadAccounts:(NSError **)error;
 - (BOOL)saveAccounts:(NSError **)error;
 
-- (void)connectAll;
+// Connects the accounts that are set to connect at launch.
+- (void)connectAccountsForLaunch;
 - (void)disconnectAll;
 
 - (MSGAccount *)accountForChannelId:(NSInteger)channelId;

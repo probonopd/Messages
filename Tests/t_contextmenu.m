@@ -11,6 +11,7 @@
 #import "MSGChannel.h"
 #import "MSGNetwork.h"
 #import "MSGUser.h"
+#import "MSGProtocol.h"
 
 static NSArray *MenuTitles(NSMenu *menu)
 {
@@ -278,6 +279,72 @@ int main(void)
 		PASS(!MenuHasTitle(onOp, @"Kick"), "voice user sees no Kick on op");
 
 		[chan release];
+	}
+
+	/* --- menus follow the backend's capabilities --- */
+	{
+		MSGCapabilities lounge = MSGCapabilityServerSearch |
+			MSGCapabilityHistoryPaging | MSGCapabilityClearHistory |
+			MSGCapabilityMute | MSGCapabilityIRCCommands |
+			MSGCapabilityServerManagedNetworks;
+		MSGCapabilities quassel = MSGCapabilityHistoryPaging |
+			MSGCapabilityIRCCommands;
+		MSGCapabilities nosterm = MSGCapabilityGroupDirectory |
+			MSGCapabilityHistoryPaging | MSGCapabilityClearHistory |
+			MSGCapabilityMute;
+		MSGNetwork *network = MakeNetwork(YES);
+		MSGChannel *lobby = [network lobby];
+		MSGChannel *channel = [[[MSGChannel alloc] initWithDictionary:
+			@{@"id": @11, @"name": @"#gnustep", @"type": @"channel",
+			  @"state": @1}] autorelease];
+		[network addChannel:channel];
+		MSGChannel *query = [[[MSGChannel alloc] initWithDictionary:
+			@{@"id": @12, @"name": @"alice", @"type": @"query"}] autorelease];
+		[network addChannel:query];
+
+		NSMenu *m = [MSGContextMenuBuilder channelMenuForChannel:lobby
+			network:network myNick:@"me" capabilities:lounge delegate:nil];
+		PASS(MenuHasTitle(m, @"List ignored users") && MenuHasTitle(m, @"Disconnect"),
+			"bouncer lobby keeps IRC and network items");
+
+		m = [MSGContextMenuBuilder channelMenuForChannel:lobby
+			network:network myNick:@"me" capabilities:quassel delegate:nil];
+		PASS(MenuHasTitle(m, @"List all channels") && !MenuHasTitle(m, @"Disconnect"),
+			"networks the client does not manage offer no connect item");
+		PASS(!MenuHasTitle(m, @"Remove"),
+			"networks the client does not manage cannot be removed");
+
+		m = [MSGContextMenuBuilder channelMenuForChannel:lobby
+			network:network myNick:@"me" capabilities:nosterm delegate:nil];
+		PASS(!MenuHasTitle(m, @"List ignored users") && !MenuHasTitle(m, @"Disconnect"),
+			"relay lobby has no IRC items");
+		PASS(MenuHasTitle(m, @"List all channels") && MenuHasTitle(m, @"Join a channel…"),
+			"relay lobby lists groups and joins");
+
+		m = [MSGContextMenuBuilder channelMenuForChannel:channel
+			network:network myNick:@"me" capabilities:nosterm delegate:nil];
+		PASS(!MenuHasTitle(m, @"Edit topic") && !MenuHasTitle(m, @"List banned users"),
+			"relay channel has no IRC items");
+		PASS(MenuHasTitle(m, @"Clear history") && MenuHasTitle(m, @"Leave"),
+			"relay channel keeps generic items");
+
+		m = [MSGContextMenuBuilder channelMenuForChannel:channel
+			network:network myNick:@"me" capabilities:quassel delegate:nil];
+		PASS(!MenuHasTitle(m, @"Clear history") && !MenuHasTitle(m, @"Mute channel"),
+			"items for missing capabilities are left out");
+
+		m = [MSGContextMenuBuilder channelMenuForChannel:query
+			network:network myNick:@"me" capabilities:nosterm delegate:nil];
+		PASS(!MenuHasTitle(m, @"User information"), "relay query has no whois");
+
+		MSGUser *alice = [[[MSGUser alloc] initWithDictionary:
+			@{@"nick": @"alice", @"modes": @[]}] autorelease];
+		PASS([MSGContextMenuBuilder userMenuForUser:alice channel:channel
+			network:network myNick:@"me" capabilities:nosterm delegate:nil] == nil,
+			"no user menu without IRC commands");
+		PASS([MSGContextMenuBuilder userMenuForUser:alice channel:channel
+			network:network myNick:@"me" capabilities:quassel delegate:nil] != nil,
+			"IRC backends keep the user menu");
 	}
 
 	[arp release];

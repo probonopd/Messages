@@ -35,6 +35,9 @@ extern NSString *const MSGAccountStateDidChangeNotification;   // userInfo: stat
 extern NSString *const MSGAccountDidBecomeReadyNotification;
 extern NSString *const MSGAccountErrorNotification;            // userInfo: error, recoverable
 
+// Settings key shared by all backends: NSNumber BOOL, default YES.
+extern NSString *const MSGAccountConnectAtLaunchKey;
+
 @protocol MSGAccountDelegate <NSObject>
 // The account changed its persistent settings (e.g. obtained a token).
 - (void)accountSettingsDidChange:(MSGAccount *)account;
@@ -76,6 +79,7 @@ extern NSString *const MSGAccountErrorNotification;            // userInfo: erro
 // trigger a silent reconnect instead of an error for the user.
 - (void)setEstablished:(BOOL)established;
 
+- (BOOL)connectsAtLaunch;
 - (NSString *)displayName;
 - (NSURL *)serverURL;
 - (MSGCapabilities)capabilities;

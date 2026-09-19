@@ -8,28 +8,22 @@
 
 @class MSGAccountPanelController;
 @class MSGBackendRegistry;
-@class MSGAccount;
 
 @protocol MSGAccountPanelDelegate <NSObject>
-// `account` is the account being edited, or nil for a new one.
 - (void)accountPanel:(MSGAccountPanelController *)panel
 	didSubmitBackend:(NSString *)backendIdentifier
-	settings:(NSDictionary *)settings
-	forAccount:(MSGAccount *)account;
+	settings:(NSDictionary *)settings;
 @end
 
-// Creates or edits an account. The form is built from the backend's
-// +accountSettingFields, so every backend gets the same layout and needs no
-// AppKit code of its own.
+// Creates an account: a service pop-up above the backend's settings form
+// (MSGSettingsFormView). Existing accounts are edited in Preferences.
 @interface MSGAccountPanelController : NSWindowController
 
 @property (nonatomic, assign) id<MSGAccountPanelDelegate> delegate;
-@property (nonatomic, readonly) MSGAccount *account;
 
 - (instancetype)initWithRegistry:(MSGBackendRegistry *)registry;
 
 - (void)prepareForNewAccountWithBackend:(NSString *)backendIdentifier;
-- (void)prepareForEditingAccount:(MSGAccount *)account;
 - (void)setStatusText:(NSString *)text;
 
 @end

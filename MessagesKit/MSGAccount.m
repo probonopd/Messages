@@ -17,6 +17,7 @@
 NSString *const MSGAccountStateDidChangeNotification = @"MSGAccountStateDidChangeNotification";
 NSString *const MSGAccountDidBecomeReadyNotification = @"MSGAccountDidBecomeReadyNotification";
 NSString *const MSGAccountErrorNotification = @"MSGAccountErrorNotification";
+NSString *const MSGAccountConnectAtLaunchKey = @"connectAtLaunch";
 
 NSString *MSGConnectionStateDisplayString(MSGConnectionState state)
 {
@@ -145,6 +146,12 @@ NSString *MSGConnectionStateDisplayString(MSGConnectionState state)
 {
 	_channelIdBase = base;
 	_protocol.channelIdBase = base;
+}
+
+- (BOOL)connectsAtLaunch
+{
+	id value = _settings[MSGAccountConnectAtLaunchKey];
+	return value == nil || [value boolValue];
 }
 
 - (NSString *)displayName

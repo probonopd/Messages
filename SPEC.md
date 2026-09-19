@@ -1109,11 +1109,11 @@ GNUstep GUI
 
 and AppKit-compatible GNUstep APIs.
 
-Avoid Apple-only APIs unless a GNUstep implementation is verified.
+Avoid APIs that GNUstep does not implement; use one only after its GNUstep implementation is verified.
 
 Do not require:
 
-* Cocoa-only frameworks;
+* frameworks GNUstep does not provide;
 * WebKit;
 * WebView;
 * JavaScriptCore;

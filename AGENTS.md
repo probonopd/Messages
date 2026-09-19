@@ -11,8 +11,9 @@ source /System/Library/Makefiles/GNUstep.sh
 ```
 
 - Everything: `make` at the top (aggregate: MessagesKit, Backends, Messages; the app copies the built bundles into `Messages.app/PlugIns`). `sudo make install` installs the framework and the app to SYSTEM.
-- Tests: `make` at the top first, then `cd Tests && make` and run `./obj/t_*` with `LD_LIBRARY_PATH=$PWD/../MessagesKit/MessagesKit.framework/Versions/Current` (`gmake check` is NOT wired). Offline: `t_accounts`, `t_quassel` (spawns `Fixtures/quassel_mockcore.py`, needs python3), `t_model`, `t_engineio`, `t_socketio`, `t_protocol`, `t_badge`, `t_bubbles`, `t_contextmenu`, `t_nostr_crypto`, `t_nosterm_nickname`. `t_quassel` links the Quassel engine objects from `Backends/Quassel/Engine/obj`, so the backends must be built.
+- Tests: `make` at the top first, then `cd Tests && make` and run `./obj/t_*` with `LD_LIBRARY_PATH=$PWD/../MessagesKit/MessagesKit.framework/Versions/Current` (`gmake check` is NOT wired). Offline: `t_accounts`, `t_accountui` (Account menu section, settings form), `t_outline` (sidebar selection), `t_quassel` (spawns `Fixtures/quassel_mockcore.py`, needs python3), `t_model`, `t_engineio`, `t_socketio`, `t_protocol`, `t_badge`, `t_bubbles`, `t_contextmenu`, `t_nostr_crypto`, `t_nosterm_nickname`. `t_quassel` links the Quassel engine objects from `Backends/Quassel/Engine/obj`, so the backends must be built.
 - Tool: `cd Tools && make` -> `./obj/thelounge-protocol-dump`
+- In-tree consumers link MessagesKit by path (`MSGKIT_LIBS` in `MessagesKit/MessagesKit.make`), because gnustep-make puts `-L/System/Library/Libraries` first and a plain `-lMessagesKit` silently links the installed copy. Likewise, when running an uninstalled build, set `LD_LIBRARY_PATH` AFTER sourcing `GNUstep.sh`, which prepends the system library path.
 - `make clean` before rebuilding when changing sources; zero warnings is a hard requirement (fix every warning, never suppress beyond the one flag below)
 
 Links `-lcurl` (libcurl 8.14.1 with `ws`/`wss`). Compiler is clang.
@@ -22,7 +23,7 @@ Links `-lcurl` (libcurl 8.14.1 with `ws`/`wss`). Compiler is clang.
 - Manual retain/release, `[super dealloc]`. No ARC anywhere, with one exception: the upstream Quassel engine (`Backends/Quassel/Engine`, `Backends/Quassel/Transport`) keeps its ARC and is built as a `subproject.make` with `-fobjc-arc`. The Quassel glue in `Backends/Quassel/Backend` is MRC. The engine holds its delegate strongly and does not retain itself during its own callbacks: clear the delegate and autorelease (not release) the engine when closing.
 - `__weak` is a compile error. Blocks that capture `self` must use `__block` (MRC `__block` does not retain, so no cycle). Delegate properties are `assign`.
 - No GCD/dispatch at all; use NSLock/`performSelectorOnMainThread`.
-- Model properties `newNick`, `newIdent`, `newHost`, `rawText` intentionally mirror wire field names and trip clang's Cocoa ownership heuristic - the `-Wno-objc-property-matches-cocoa-ownership-rule` flag in the GNUmakefiles must stay.
+- Model properties `newNick`, `newIdent`, `newHost`, `rawText` intentionally mirror wire field names and trip clang's ownership naming heuristic (the flag name is clang's) - the `-Wno-objc-property-matches-cocoa-ownership-rule` flag in the GNUmakefiles must stay.
 - `MSGMessage` has a BOOL property named `self`; read it with `-isSelf`, never `message.self` (clang crashes in its backend on that).
 - The GNUmakefiles pin `GNUSTEP_INSTALLATION_DOMAIN = SYSTEM`; the backend bundles set `STANDARD_INSTALL = no` and are installed inside the app. Never install to LOCAL; verify `/Local/Applications` etc. has no leftovers after `make install`.
 
@@ -46,6 +47,6 @@ Chain (The Lounge): `MSGWebSocketTransport` (libcurl CURLWS, connect-only + sele
 
 ## Style
 
-- New files: BSD-2-Clause header `Copyright (c) 2026 Simon Peter` (project has no GPL).
+- New files: header `Copyright (c) 2026 Simon Peter` with `SPDX-License-Identifier: BSD-2-Clause OR GPL-3.0-or-later` (the project contains GPL code since the Quassel backend; older files stay BSD-2-Clause). Files in `Backends/Quassel/Engine` and `Transport` and `Tests/Fixtures/quassel_mockcore.py` are third-party GPL-3.0-only: keep their headers, mark every change with a "Modified for Messages" comment at the top. Licensing overview: README "License", `LICENSE`, `Backends/Quassel/LICENSE`.
 - No em-dashes (plain `-`), no "WiFi"/"Wi-Fi" (use "WLAN").
 - Comments only explain WHY, never WHAT.

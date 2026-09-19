@@ -1,4 +1,5 @@
 // Dual-Licensed, GPLv3 and Woboq GmbH's private license. See file "LICENSE"
+// Modified for Messages (2026): byte order uses Foundation's NSSwap* functions.
 
 #import "BufferInfo.h"
 #import "SignedId.h"
@@ -21,24 +22,24 @@
 
     //            BufferInfo ret = new BufferInfo();
     //            ret.id = stream.readInt();
-    bufferId = [[BufferId alloc] initWithInt:CFSwapInt32BigToHost(*(int*)([s bytes] + offset))];
+    bufferId = [[BufferId alloc] initWithInt:NSSwapBigIntToHost(*(int*)([s bytes] + offset))];
     offset += 4;
     
     //            ret.networkId = stream.readInt();
-    networkId = [[NetworkId alloc] initWithInt:CFSwapInt32BigToHost(*(int*)([s bytes] + offset))];
+    networkId = [[NetworkId alloc] initWithInt:NSSwapBigIntToHost(*(int*)([s bytes] + offset))];
     offset += 4;
     
     //            ret.type = BufferInfo.Type.getType(stream.readShort());
-    bufferType = CFSwapInt16BigToHost(*(int*)([s bytes] + offset));
+    bufferType = NSSwapBigShortToHost(*(int*)([s bytes] + offset));
     offset += 2;
     
     //            ret.groupId = stream.readUInt(32); // FIXME What is a group ID?
-    groupId = CFSwapInt32BigToHost(*(int*)([s bytes] + offset));
+    groupId = NSSwapBigIntToHost(*(int*)([s bytes] + offset));
     offset += 4;
     
     //            ret.name =  (String) QMetaTypeRegistry.instance().getTypeForName("QByteArray").getSerializer().unserialize(stream, version);
     //Otherwise: the array size (quint32) followed by the array bytes, i.e. size bytes
-    unsigned int baSize = CFSwapInt32BigToHost(*(int*)([s bytes] + offset));
+    unsigned int baSize = NSSwapBigIntToHost(*(int*)([s bytes] + offset));
     //NSLog(@"BufferInfo baSize=%u", baSize);
     offset += 4;
     if (baSize != 0xFFFFFFFF) {
@@ -56,10 +57,10 @@
     
     [networkId serialize:data];
     
-    short bufferTypeSerialization = CFSwapInt16HostToBig(bufferType);
+    short bufferTypeSerialization = NSSwapHostShortToBig(bufferType);
     [data appendBytes:(char*)&bufferTypeSerialization length:2];
     
-    int groupIdSerialization = CFSwapInt32HostToBig(groupId);
+    int groupIdSerialization = NSSwapHostIntToBig(groupId);
     [data appendBytes:(char*)&groupIdSerialization length:4];
     
     // serialize buffer name as byte array
@@ -67,7 +68,7 @@
     if (!bufferNameUtf8)
         bufferNameUtf8 = "";
     int bufferNameUtf8Length = strlen(bufferNameUtf8);
-    int bufferNameUtf8LengthNetwork = CFSwapInt32BigToHost(bufferNameUtf8Length);
+    int bufferNameUtf8LengthNetwork = NSSwapBigIntToHost(bufferNameUtf8Length);
     [data appendBytes:&bufferNameUtf8LengthNetwork length:4];
     [data appendBytes:bufferNameUtf8 length:bufferNameUtf8Length];
 }

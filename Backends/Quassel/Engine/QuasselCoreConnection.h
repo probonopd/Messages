@@ -1,5 +1,5 @@
 // Dual-Licensed, GPLv3 and Woboq GmbH's private license. See file "LICENSE"
-// Modified for Messages (2026): the GCD queue ivar is gone, see the .m file.
+// Modified for Messages (2026): the dispatch queue ivar is gone, see the .m file.
 
 #import "QuasselCoreConnectionDelegate.h"
 #import "SignedId.h"

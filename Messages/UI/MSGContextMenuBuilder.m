@@ -123,6 +123,18 @@
 	myNick:(NSString *)myNick
 	delegate:(id<MSGContextMenuActionDelegate>)delegate
 {
+	return [self channelMenuForChannel:channel network:network myNick:myNick
+		capabilities:MSGContextMenuAllCapabilities delegate:delegate];
+}
+
++ (NSMenu *)channelMenuForChannel:(MSGChannel *)channel
+	network:(MSGNetwork *)network
+	myNick:(NSString *)myNick
+	capabilities:(MSGCapabilities)capabilities
+	delegate:(id<MSGContextMenuActionDelegate>)delegate
+{
+	BOOL irc = (capabilities & MSGCapabilityIRCCommands) != 0;
+	BOOL managedNetworks = (capabilities & MSGCapabilityServerManagedNetworks) != 0;
 	_TLContextMenuSink *sink = [[_TLContextMenuSink alloc]
 		initWithDelegate:delegate];
 	[sink autorelease];
@@ -144,21 +156,27 @@
 			action:@{@"action": @"joinPrompt", @"channelId": @(channelId)}
 			sink:sink];
 		[menu addItem:join];
-		[self addCommandItemToMenu:menu title:@"List all channels"
-			command:@"/list" channelId:channelId sink:sink];
-		[self addCommandItemToMenu:menu title:@"List ignored users"
-			command:@"/ignorelist" channelId:channelId sink:sink];
-		[self addCommandItemToMenu:menu
-			title:network.connected ? @"Disconnect" : @"Connect"
-			command:network.connected ? @"/disconnect" : @"/connect"
-			channelId:channelId sink:sink];
+		if (irc || (capabilities & MSGCapabilityGroupDirectory)) {
+			[self addCommandItemToMenu:menu title:@"List all channels"
+				command:@"/list" channelId:channelId sink:sink];
+		}
+		if (irc) {
+			[self addCommandItemToMenu:menu title:@"List ignored users"
+				command:@"/ignorelist" channelId:channelId sink:sink];
+		}
+		if (managedNetworks) {
+			[self addCommandItemToMenu:menu
+				title:network.connected ? @"Disconnect" : @"Connect"
+				command:network.connected ? @"/disconnect" : @"/connect"
+				channelId:channelId sink:sink];
+		}
 		NSMenuItem *forget = [self actionItemWithTitle:@"Forget"
 			action:@{@"action": @"forget", @"channelId": @(channelId)}
 			sink:sink];
 		[menu addItem:forget];
 	}
 
-	if (channel.type == MSGChannelTypeChannel) {
+	if (irc && channel.type == MSGChannelTypeChannel) {
 		NSMenuItem *topic = [self actionItemWithTitle:@"Edit topic"
 			action:@{@"action": @"topicPrompt", @"channelId": @(channelId)}
 			sink:sink];
@@ -167,7 +185,7 @@
 			command:@"/banlist" channelId:channelId sink:sink];
 	}
 
-	if (channel.type == MSGChannelTypeQuery) {
+	if (irc && channel.type == MSGChannelTypeQuery) {
 		NSString *nick = channel.name;
 		[self addCommandItemToMenu:menu title:@"User information"
 			command:[@"/whois " stringByAppendingString:nick]
@@ -177,15 +195,17 @@
 			channelId:channelId sink:sink];
 	}
 
-	if (channel.type == MSGChannelTypeChannel ||
-		channel.type == MSGChannelTypeQuery) {
+	if ((capabilities & MSGCapabilityClearHistory) &&
+		(channel.type == MSGChannelTypeChannel ||
+		channel.type == MSGChannelTypeQuery)) {
 		NSMenuItem *clear = [self actionItemWithTitle:@"Clear history"
 			action:@{@"action": @"clearHistory", @"channelId": @(channelId)}
 			sink:sink];
 		[menu addItem:clear];
 	}
 
-	if (channel.type != MSGChannelTypeSpecial) {
+	if ((capabilities & MSGCapabilityMute) &&
+		channel.type != MSGChannelTypeSpecial) {
 		NSString *type = [self humanTypeNameForChannel:channel];
 		NSString *label = channel.muted
 			? [NSString stringWithFormat:@"Unmute %@", type]
@@ -209,11 +229,15 @@
 		closeLabel = @"Close";
 		break;
 	}
-	NSMenuItem *close = [self actionItemWithTitle:closeLabel
-		action:@{@"action": @"close", @"channelId": @(channelId),
-			@"isLobby": @(channel.type == MSGChannelTypeLobby)}
-		sink:sink];
-	[menu addItem:close];
+	// Removing a network is a server command only where the server owns
+	// the network list; elsewhere Forget removes the whole account.
+	if (channel.type != MSGChannelTypeLobby || managedNetworks) {
+		NSMenuItem *close = [self actionItemWithTitle:closeLabel
+			action:@{@"action": @"close", @"channelId": @(channelId),
+				@"isLobby": @(channel.type == MSGChannelTypeLobby)}
+			sink:sink];
+		[menu addItem:close];
+	}
 
 	[menu autorelease];
 	return menu;
@@ -235,6 +259,21 @@
 	myNick:(NSString *)myNick
 	delegate:(id<MSGContextMenuActionDelegate>)delegate
 {
+	return [self userMenuForUser:user channel:channel network:network
+		myNick:myNick capabilities:MSGContextMenuAllCapabilities delegate:delegate];
+}
+
++ (NSMenu *)userMenuForUser:(MSGUser *)user
+	channel:(MSGChannel *)channel
+	network:(MSGNetwork *)network
+	myNick:(NSString *)myNick
+	capabilities:(MSGCapabilities)capabilities
+	delegate:(id<MSGContextMenuActionDelegate>)delegate
+{
+	// Every item here is an IRC command.
+	if (!(capabilities & MSGCapabilityIRCCommands)) {
+		return nil;
+	}
 	_TLContextMenuSink *sink = [[_TLContextMenuSink alloc]
 		initWithDelegate:delegate];
 	[sink autorelease];

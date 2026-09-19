@@ -1,6 +1,7 @@
 // Dual-Licensed, GPLv3 and Woboq GmbH's private license. See file "LICENSE"
 // Modified for Messages (2026): compiler warnings fixed (unused decoded values
-// that upstream skips anyway, format specifiers).
+// that upstream skips anyway, format specifiers); byte order uses
+// Foundation's NSSwap* functions.
 
 #import "QVariant.h"
 #import "BufferInfo.h"  
@@ -35,7 +36,7 @@
     self = [super init];
 
     if (s && s.length == 5) {
-        NSLog(@"Reading null serialization of identifier %d", CFSwapInt32BigToHost(*(int*)[s bytes]));
+        NSLog(@"Reading null serialization of identifier %d", NSSwapBigIntToHost(*(int*)[s bytes]));
         return self;
     }
 
@@ -46,7 +47,7 @@
     
     
     // read 4 bytes identifier
-    int identifier = CFSwapInt32BigToHost(*(int*)[s bytes]);
+    int identifier = NSSwapBigIntToHost(*(int*)[s bytes]);
     if (identifier == 8) {
 //        // variant dictionary
         //NSLog(@"Deserializing variant map");
@@ -64,7 +65,7 @@
     } else if (identifier == 9) {
         // qvariant list
         int offset = 4 + 1; // int identifier, null byte
-        int entryCount = CFSwapInt32BigToHost(*(int*)([s bytes] + offset));
+        int entryCount = NSSwapBigIntToHost(*(int*)([s bytes] + offset));
         //NSLog(@"array with %d entries", entryCount);
         offset += 4;
 
@@ -87,7 +88,7 @@
     } else if (identifier == 11) {
         // qstring list
         int offset = 4 + 1; // int identifier, null byte
-        int entryCount = CFSwapInt32BigToHost(*(int*)([s bytes] + offset));
+        int entryCount = NSSwapBigIntToHost(*(int*)([s bytes] + offset));
         //NSLog(@"string array with %d entries", entryCount);
         offset += 4;
         
@@ -111,7 +112,7 @@
         // integer
        // NSLog(@"Deserializing integer");
         int offset = 4 + 1; // int identifier, null byte
-        int i = CFSwapInt32BigToHost(*(int*)([s bytes] + offset));
+        int i = NSSwapBigIntToHost(*(int*)([s bytes] + offset));
         integer = [NSNumber numberWithInteger:i];
         *bytesRead = offset + 4;
     } else if (identifier == 133) {
@@ -124,7 +125,7 @@
         // integer
        // NSLog(@"Deserializing unsigned integer");
         int offset = 4 + 1; // int identifier, null byte
-        unsigned int i = CFSwapInt32BigToHost(*(int*)([s bytes] + offset));
+        unsigned int i = NSSwapBigIntToHost(*(int*)([s bytes] + offset));
         integer = [NSNumber numberWithUnsignedInteger:i];
         *bytesRead = offset + 4;
     } else if (identifier == 10) {
@@ -145,7 +146,7 @@
         //NSLog(@"FIXME Deserializing time");
         //        Time (QTime) - Milliseconds since midnight (quint32) FIXME
         int offset = 4 + 1; // int identifier, null byte
-        msecsSinceMidnight = [NSNumber numberWithUnsignedInt:CFSwapInt32BigToHost(*(int*)([s bytes] + offset))];
+        msecsSinceMidnight = [NSNumber numberWithUnsignedInt:NSSwapBigIntToHost(*(int*)([s bytes] + offset))];
         offset += 4;
         *bytesRead = offset;
         
@@ -185,11 +186,11 @@
         offset += bytesForUserTypeIdentifier;
         
         if (0 == strcmp("NetworkId", userTypeIdentifier)) {
-            unsigned int i = CFSwapInt32BigToHost(*(int*)([s bytes] + offset));
+            unsigned int i = NSSwapBigIntToHost(*(int*)([s bytes] + offset));
             networkId = [[NetworkId alloc] initWithInt:i];
             offset += 4;
         } else if (0 == strcmp("IdentityId", userTypeIdentifier)) {
-            unsigned int i = CFSwapInt32BigToHost(*(int*)([s bytes] + offset));
+            unsigned int i = NSSwapBigIntToHost(*(int*)([s bytes] + offset));
             identityId = [[IdentityId alloc] initWithInt:i];
             offset += 4;
         } else if (0 == strcmp("BufferId", userTypeIdentifier)) {
@@ -257,7 +258,7 @@
     } else if (identifier == 7) {
         //NSLog(@"Deserializing char [FIXME] %@", [s base64EncodedStringWithOptions:0]);
 //        int offset = 4 + 1; // int identifier, null byte
-//        int i = CFSwapInt32BigToHost(*(int*)([s bytes] + offset));
+//        int i = NSSwapBigIntToHost(*(int*)([s bytes] + offset));
 //        int j = (*(int*)([s bytes] + offset));
 //        char c = i;
 //        char h = j;
@@ -271,7 +272,7 @@
         // [0][0][0][7][0][0]t[0][0][0][10][0][255][255][255][255]
 
         int offset = 4 + 1; // int identifier, null byte
-        int i = CFSwapInt16BigToHost(*(int*)([s bytes] + offset));
+        int i = NSSwapBigShortToHost(*(int*)([s bytes] + offset));
         char c = i;
 #ifdef QUASSEL_DEBUG_PROTOCOL
         NSLog(@"Deserializing char -> %c", c);
@@ -362,7 +363,7 @@
 
 + (NSData*) deserializeByteArray:(NSData*)valueData bytesRead:(int*)bytesRead
 {
-    unsigned int length = CFSwapInt32BigToHost(*(int*)([valueData bytes]));
+    unsigned int length = NSSwapBigIntToHost(*(int*)([valueData bytes]));
     *bytesRead += 4;
     //NSLog(@"Deserializing byte array with %u bytes", length);
     if (length == 0xFFFFFFFF)
@@ -380,7 +381,7 @@
     //NSLog(@"Deserializing variant map");
     
     int offset = 0;
-    int entryCount = CFSwapInt32BigToHost(*(int*)([s bytes] + offset));
+    int entryCount = NSSwapBigIntToHost(*(int*)([s bytes] + offset));
     //NSLog(@"map with %d entries", entryCount);
     offset += 4;
     
@@ -418,7 +419,7 @@
 
 - (char*) deserializeCharString:(NSData*)data bytesRead:(int*)bR
 {
-    int length = CFSwapInt32BigToHost(*(int*)[data bytes]);
+    int length = NSSwapBigIntToHost(*(int*)[data bytes]);
     *bR = 4 + length;
     
     char *ret = malloc(length+1);
@@ -430,7 +431,7 @@
 - (NSString*) deserializeString:(NSData*)data bytesRead:(int*)bR
 {
     // Read length
-    unsigned int length = CFSwapInt32BigToHost(*(int*)[data bytes]);
+    unsigned int length = NSSwapBigIntToHost(*(int*)[data bytes]);
     //NSLog(@"Deserializing string with %d bytes", length);
     
     *bR += 4;
@@ -483,7 +484,7 @@
     
     NSMutableData *returnData = [NSMutableData dataWithCapacity:data.length + 4];
     
-    int length = CFSwapInt32HostToBig(data.length);
+    int length = NSSwapHostIntToBig(data.length);
     [returnData appendBytes:(char*)&length length:4];
     [returnData appendData:data];
     return returnData;
@@ -494,11 +495,11 @@
     NSMutableData *data = [NSMutableData data];
     if (dict) {
         // append ID
-        int identifier = CFSwapInt32HostToBig(8);
+        int identifier = NSSwapHostIntToBig(8);
         [data appendBytes:(char*)&identifier length:4];
         [data appendBytes:"\x00" length:1];
         // append length
-        int count = CFSwapInt32HostToBig(dict.count);
+        int count = NSSwapHostIntToBig(dict.count);
         [data appendBytes:(char*)&count length:4];
         [dict enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
             [data appendData:[QVariant serializeString:key]];
@@ -506,10 +507,10 @@
         }];
         //NSLog(@"Serialized %d bytes - %d item qvariant map", data.length, dict.count);
     } else if (list) {
-        int identifier = CFSwapInt32HostToBig(9);
+        int identifier = NSSwapHostIntToBig(9);
         [data appendBytes:(char*)&identifier length:4];
         [data appendBytes:"\x00" length:1];
-        int count = CFSwapInt32HostToBig(list.count);
+        int count = NSSwapHostIntToBig(list.count);
         [data appendBytes:(char*)&count length:4];
         [list enumerateObjectsUsingBlock:^(id obj, NSUInteger i, BOOL *stop) {
             //NSLog(@"List serialization: Item %d %@", i, obj);
@@ -518,20 +519,20 @@
         //NSLog(@"Serialized %d bytes - %d item qvariant list", data.length, list.count);
 
     } else if (integer) {
-        int identifier = CFSwapInt32HostToBig(2);
+        int identifier = NSSwapHostIntToBig(2);
         [data appendBytes:(char*)&identifier length:4];
         [data appendBytes:"\x00" length:1];
-        int i = CFSwapInt32HostToBig([integer intValue]);
+        int i = NSSwapHostIntToBig([integer intValue]);
         [data appendBytes:(char*)&i length:4];
         //NSLog(@"Serialized %d bytes - integer of value %d", data.length, [integer intValue]);
     } else if (string) {
-        int identifier = CFSwapInt32HostToBig(10);
+        int identifier = NSSwapHostIntToBig(10);
         [data appendBytes:(char*)&identifier length:4];
         [data appendBytes:"\x00" length:1];
         [data appendData:[QVariant serializeString:string]];
         //NSLog(@"Serialized %d bytes - string %@", data.length, string);
     } else if (boolean) {
-        int identifier = CFSwapInt32HostToBig(1);
+        int identifier = NSSwapHostIntToBig(1);
         [data appendBytes:(char*)&identifier length:4];
         [data appendBytes:"\x00" length:1];
         if (boolean.value)
@@ -540,7 +541,7 @@
             [data appendBytes:"\x00" length:1];
         //NSLog(@"Serialized %d bytes - boolen of value %@", data.length, boolean.value ? @"TRUE" : @"FALSE");
     } else if (bufferId) {
-        int identifier = CFSwapInt32HostToBig(127); // user type
+        int identifier = NSSwapHostIntToBig(127); // user type
         [data appendBytes:(char*)&identifier length:4];
         [data appendBytes:"\x00" length:1];
         [self serialize:"BufferId" into:data];
@@ -548,7 +549,7 @@
         //NSLog(@"Serialized %d bytes - BufferId of value %d", data.length, [bufferId intValue]);
         
     } else if (bufferInfo) {
-        int identifier = CFSwapInt32HostToBig(127); // user type
+        int identifier = NSSwapHostIntToBig(127); // user type
         [data appendBytes:(char*)&identifier length:4];
         [data appendBytes:"\x00" length:1];
         [self serialize:"BufferInfo" into:data];
@@ -557,17 +558,17 @@
         
         
     } else if (msgId) {
-        int identifier = CFSwapInt32HostToBig(127); // user type
+        int identifier = NSSwapHostIntToBig(127); // user type
         [data appendBytes:(char*)&identifier length:4];
         [data appendBytes:"\x00" length:1];
         [self serialize:"MsgId" into:data];
         [msgId serialize:data];
         //NSLog(@"Serialized %d bytes - MsgId of value %d", data.length, [msgId intValue]);
     } else if (msecsSinceMidnight) {
-        int identifier = CFSwapInt32HostToBig(15);
+        int identifier = NSSwapHostIntToBig(15);
         [data appendBytes:(char*)&identifier length:4];
         [data appendBytes:"\x00" length:1];
-        int i = CFSwapInt32HostToBig([msecsSinceMidnight intValue]);
+        int i = NSSwapHostIntToBig([msecsSinceMidnight intValue]);
         [data appendBytes:(char*)&i length:4];
     } else {
         NSLog(@"ERROR: Dont know how to serialize %@", self);
@@ -577,7 +578,7 @@
 
 - (void) serialize:(const char*)c into:(NSMutableData*)data
 {
-    int len = CFSwapInt32HostToBig(strlen(c));
+    int len = NSSwapHostIntToBig(strlen(c));
     [data appendBytes:(char*)&len length:4];
     [data appendBytes:c length:strlen(c)];
 }

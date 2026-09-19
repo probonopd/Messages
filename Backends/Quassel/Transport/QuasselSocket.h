@@ -2,18 +2,13 @@
 //  QuasselSocket.h
 //  Quassel for GNUstep
 //
-//  Drop-in replacement for the twelve-selector subset of GCDAsyncSocket that
-//  QuasselCoreConnection actually uses, implemented on NSStream.
+//  Drop-in replacement for the twelve-selector subset of the socket library
+//  that QuasselCoreConnection uses. The original library's TLS depends on a
+//  framework GNUstep does not have; rather than port 7,430 lines, this
+//  implements the small surface the engine needs on a POSIX socket with
+//  GNUstep's GnuTLS layer (GSTLSSession, see QuasselSocket.m).
 //
-//  Why this exists: CocoaAsyncSocket's TLS path is SecureTransport
-//  (SSLCreateContext / SSLHandshake / SecTrust...), and GNUstep has no
-//  Security.framework at all. Rather than port 7,430 lines, this implements the
-//  small surface the app needs on top of NSStream, whose GNUstep implementation
-//  already carries a GnuTLS handler (see GSSocketStream.m / GSTLS.m).
-//
-//  STARTTLS after connect -- required by the Quassel handshake, which upgrades
-//  only once ClientInitAck has been received -- maps onto setting
-//  NSStreamSocketSecurityLevelKey on an already-open stream pair.
+//  Modified for Messages (2026): comments reworded.
 //
 
 #import <Foundation/Foundation.h>
@@ -61,7 +56,7 @@
 /// -socket:didReadData:withTag:, after which the engine asks again.
 - (void)readDataWithTimeout:(NSTimeInterval)timeout tag:(long)tag;
 
-/// Upgrade an open connection to TLS. Honours kCFStreamSSLValidatesCertificateChain
+/// Upgrade an open connection to TLS. Honours QuasselTLSValidatesCertificateChain
 /// = NO, which is what the app passes.
 - (void)startTLS:(NSDictionary *)tlsSettings;
 

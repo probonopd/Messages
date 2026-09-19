@@ -14,6 +14,7 @@
 #import "MSGMainWindowController.h"
 #import "MSGPreferencesController.h"
 #import "MSGPreferences.h"
+#import "MSGAccountMenuSection.h"
 
 @interface MSGApplicationDelegate ()
 {
@@ -25,7 +26,12 @@
 	// The account the open panel is waiting for; a new account that fails
 	// before it ever worked is removed again so a retry starts clean.
 	MSGAccount *_panelAccount;
-	BOOL _panelAccountIsNew;
+	// The Account menu: the generic items first, then the section built
+	// for the selected account's backend.
+	NSMenu *_accountMenu;
+	NSInteger _accountMenuGenericCount;
+	// Capabilities the section was built for, or -1 before the first build.
+	long long _accountMenuCapabilities;
 }
 @end
 
@@ -40,6 +46,7 @@
 	[_preferencesController release];
 	[_accountPanel release];
 	[_panelAccount release];
+	[_accountMenu release];
 	[super dealloc];
 }
 
@@ -61,6 +68,9 @@
 		name:MSGAccountErrorNotification object:nil];
 	[center addObserver:self selector:@selector(accountDidBecomeReady:)
 		name:MSGAccountDidBecomeReadyNotification object:nil];
+	[center addObserver:self selector:@selector(selectedAccountDidChange:)
+		name:MSGMainWindowSelectedAccountDidChangeNotification object:nil];
+	_accountMenuCapabilities = -1;
 
 	[self buildMainMenu];
 
@@ -75,7 +85,7 @@
 	if ([_manager.accounts count] == 0) {
 		[self newAccount:nil];
 	} else {
-		[_manager connectAll];
+		[_manager connectAccountsForLaunch];
 	}
 }
 
@@ -110,8 +120,9 @@
 	[appMenu addItem:[NSMenuItem separatorItem]];
 	[appMenu addItemWithTitle:@"Hide Messages"
 		action:@selector(hide:) keyEquivalent:@"h"];
-	[appMenu addItemWithTitle:@"Hide Others"
+	NSMenuItem *hideOthers = (NSMenuItem *)[appMenu addItemWithTitle:@"Hide Others"
 		action:@selector(hideOtherApplications:) keyEquivalent:@"h"];
+	[hideOthers setKeyEquivalentModifierMask:NSCommandKeyMask | NSAlternateKeyMask];
 	[appMenu addItemWithTitle:@"Show All"
 		action:@selector(unhideAllApplications:) keyEquivalent:@""];
 	[appMenu addItem:[NSMenuItem separatorItem]];
@@ -122,13 +133,30 @@
 		action:@selector(terminate:) keyEquivalent:@"q"];
 	[appItem setSubmenu:appMenu];
 	[mainMenu addItem:appItem];
-	[NSApp setAppleMenu:appMenu];
 	[appMenu release];
 	[appItem release];
 
 	NSMenuItem *fileItem = [[NSMenuItem alloc] initWithTitle:@"File"
 		action:NULL keyEquivalent:@""];
 	NSMenu *fileMenu = [[NSMenu alloc] initWithTitle:@"File"];
+	// Creating accounts is owned by the app delegate; target it directly
+	// because GNUstep's nil-target responder chain (firstResponder -> window
+	// -> app) does not reach the app delegate.
+	NSMenuItem *mi = [[NSMenuItem alloc] initWithTitle:@"New Account…"
+		action:@selector(newAccount:) keyEquivalent:@""];
+	[mi setTarget:self];
+	[fileMenu addItem:mi];
+	[mi release];
+	for (NSDictionary *preset in [self quickConnectPresets]) {
+		mi = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:
+			@"Connect to %@", preset[MSGPresetTitle]]
+			action:@selector(connectToPreset:) keyEquivalent:@""];
+		[mi setTarget:self];
+		[mi setRepresentedObject:preset];
+		[fileMenu addItem:mi];
+		[mi release];
+	}
+	[fileMenu addItem:[NSMenuItem separatorItem]];
 	[fileMenu addItemWithTitle:@"Close Window"
 		action:@selector(performClose:) keyEquivalent:@"w"];
 	[fileItem setSubmenu:fileMenu];
@@ -154,103 +182,40 @@
 	// The empty View menu only confuses; drop it.
 	// Window menu keeps Minimize/Zoom and doubles as the windows list.
 
-	// Chat menu: mirrors the channel/user context menus.  Actions resolve
-	// through the responder chain to the key window's controller, whose
-	// validateMenuItem: enables them based on the current selection.
-	NSMenuItem *chatItem = [[NSMenuItem alloc] initWithTitle:@"Chat"
+	// Conversation and Account hold what every backend offers; their items
+	// resolve through the responder chain to the main window controller,
+	// which enables them for the current selection. What only some
+	// backends can do follows below the separator in the Account menu.
+	NSMenuItem *conversationItem = [[NSMenuItem alloc] initWithTitle:@"Conversation"
 		action:NULL keyEquivalent:@""];
-	NSMenu *chatMenu = [[NSMenu alloc] initWithTitle:@"Chat"];
-
-	// Account actions are owned by the app delegate; target it directly
-	// because GNUstep's nil-target responder chain (firstResponder -> window
-	// -> app) does not reach the app delegate.
-	NSMenuItem *mi = [[NSMenuItem alloc] initWithTitle:@"New Account…"
-		action:@selector(newAccount:) keyEquivalent:@""];
-	[mi setTarget:self];
-	[chatMenu addItem:mi];
-	[mi release];
-	for (NSDictionary *preset in [self quickConnectPresets]) {
-		mi = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:
-			@"Connect to %@", preset[MSGPresetTitle]]
-			action:@selector(connectToPreset:) keyEquivalent:@""];
-		[mi setTarget:self];
-		[mi setRepresentedObject:preset];
-		[chatMenu addItem:mi];
-		[mi release];
-	}
-	[chatMenu addItemWithTitle:@"Edit Account…"
-		action:@selector(chatEditAccount:) keyEquivalent:@""];
-	[chatMenu addItemWithTitle:@"Remove Account…"
-		action:@selector(chatRemoveAccount:) keyEquivalent:@""];
-	[chatMenu addItem:[NSMenuItem separatorItem]];
-	[chatMenu addItemWithTitle:@"Connect"
-		action:@selector(chatToggleConnection:) keyEquivalent:@""];
-	[chatMenu addItemWithTitle:@"Remove Network…"
-		action:@selector(chatRemoveNetwork:) keyEquivalent:@""];
-	[chatMenu addItem:[NSMenuItem separatorItem]];
-	[chatMenu addItemWithTitle:@"Join a Channel…"
+	NSMenu *conversationMenu = [[NSMenu alloc] initWithTitle:@"Conversation"];
+	[conversationMenu addItemWithTitle:@"Join Channel…"
 		action:@selector(chatJoinChannel:) keyEquivalent:@""];
-	[chatMenu addItemWithTitle:@"List All Channels"
-		action:@selector(chatListChannels:) keyEquivalent:@""];
-	[chatMenu addItemWithTitle:@"List Ignored Users"
-		action:@selector(chatListIgnoredUsers:) keyEquivalent:@""];
-	[chatMenu addItemWithTitle:@"List Banned Users"
-		action:@selector(chatListBannedUsers:) keyEquivalent:@""];
-	[chatMenu addItemWithTitle:@"Edit Topic…"
-		action:@selector(chatEditTopic:) keyEquivalent:@""];
-	[chatMenu addItemWithTitle:@"Clear History…"
-		action:@selector(chatClearHistory:) keyEquivalent:@""];
-	[chatMenu addItemWithTitle:@"Mute Channel"
-		action:@selector(chatToggleMuted:) keyEquivalent:@""];
-	[chatMenu addItemWithTitle:@"Leave"
+	[conversationMenu addItemWithTitle:@"Leave Channel"
 		action:@selector(chatCloseCurrent:) keyEquivalent:@""];
-	[chatMenu addItem:[NSMenuItem separatorItem]];
-	[chatMenu addItemWithTitle:@"User Information"
-		action:@selector(chatWhoisSelectedUser:) keyEquivalent:@""];
-	[chatMenu addItemWithTitle:@"Ignore User"
-		action:@selector(chatIgnoreSelectedUser:) keyEquivalent:@""];
-	[chatMenu addItemWithTitle:@"Direct Messages"
-		action:@selector(chatQuerySelectedUser:) keyEquivalent:@""];
+	[conversationMenu addItem:[NSMenuItem separatorItem]];
+	[conversationMenu addItemWithTitle:@"Mute Channel"
+		action:@selector(chatToggleMuted:) keyEquivalent:@""];
+	[conversationMenu addItemWithTitle:@"Clear History…"
+		action:@selector(chatClearHistory:) keyEquivalent:@""];
+	[conversationItem setSubmenu:conversationMenu];
+	[mainMenu addItem:conversationItem];
+	[conversationMenu release];
+	[conversationItem release];
 
-	NSMenuItem *operatorItem = [[NSMenuItem alloc] initWithTitle:@"Operator"
+	NSMenuItem *accountItem = [[NSMenuItem alloc] initWithTitle:@"Account"
 		action:NULL keyEquivalent:@""];
-	NSMenu *operatorMenu = [[NSMenu alloc] initWithTitle:@"Operator"];
-	// Standard IRC ranks; items enable only when the server actually has the
-	// mode and our rank permits it (validated against PREFIX at use time).
-	NSArray *ranks = @[
-		@{@"mode": @"q", @"symbol": @"~", @"name": @"Owner"},
-		@{@"mode": @"a", @"symbol": @"&", @"name": @"Admin"},
-		@{@"mode": @"o", @"symbol": @"@", @"name": @"Operator"},
-		@{@"mode": @"h", @"symbol": @"%", @"name": @"Half-op"},
-		@{@"mode": @"v", @"symbol": @"+", @"name": @"Voice"}];
-	for (NSDictionary *rank in ranks) {
-		NSString *giveLabel = [NSString stringWithFormat:@"Give %@ (+%@)",
-			rank[@"name"], rank[@"mode"]];
-		NSMenuItem *give = (NSMenuItem *)[operatorMenu addItemWithTitle:giveLabel
-			action:@selector(chatSetMode:) keyEquivalent:@""];
-		[give setRepresentedObject:@{@"mode": rank[@"mode"],
-			@"symbol": rank[@"symbol"], @"give": @YES}];
-		NSString *revokeLabel = [NSString stringWithFormat:@"Revoke %@ (-%@)",
-			rank[@"name"], rank[@"mode"]];
-		NSMenuItem *revoke = (NSMenuItem *)[operatorMenu addItemWithTitle:revokeLabel
-			action:@selector(chatSetMode:) keyEquivalent:@""];
-		[revoke setRepresentedObject:@{@"mode": rank[@"mode"],
-			@"symbol": rank[@"symbol"], @"give": @NO}];
-	}
-	[operatorItem setSubmenu:operatorMenu];
-	[operatorMenu release];
-	// The item is not retained until its menu adopts it, so release only
-	// after it has been inserted.
-	[chatMenu addItem:operatorItem];
-	[operatorItem release];
-
-	[chatMenu addItemWithTitle:@"Kick"
-		action:@selector(chatKickSelectedUser:) keyEquivalent:@""];
-
-	[chatItem setSubmenu:chatMenu];
-	[mainMenu addItem:chatItem];
-	[chatMenu release];
-	[chatItem release];
+	_accountMenu = [[NSMenu alloc] initWithTitle:@"Account"];
+	[_accountMenu addItemWithTitle:@"Connect"
+		action:@selector(accountToggleConnection:) keyEquivalent:@""];
+	[_accountMenu addItemWithTitle:@"Account Settings…"
+		action:@selector(accountShowSettings:) keyEquivalent:@""];
+	[_accountMenu addItemWithTitle:@"Remove Account…"
+		action:@selector(accountRemove:) keyEquivalent:@""];
+	_accountMenuGenericCount = [_accountMenu numberOfItems];
+	[accountItem setSubmenu:_accountMenu];
+	[mainMenu addItem:accountItem];
+	[accountItem release];
 
 	NSMenuItem *windowItem = [[NSMenuItem alloc] initWithTitle:@"Window"
 		action:NULL keyEquivalent:@""];
@@ -271,12 +236,18 @@
 	[mainMenu release];
 }
 
-- (void)showPreferences:(id)sender
+- (MSGPreferencesController *)preferencesController
 {
 	if (!_preferencesController) {
-		_preferencesController = [[MSGPreferencesController alloc] init];
+		_preferencesController = [[MSGPreferencesController alloc]
+			initWithAccountManager:_manager registry:_registry];
 	}
-	[_preferencesController showWindow:self];
+	return _preferencesController;
+}
+
+- (void)showPreferences:(id)sender
+{
+	[[self preferencesController] showWindow:self];
 	[[_preferencesController window] makeKeyAndOrderFront:self];
 	[NSApp activateIgnoringOtherApps:YES];
 }
@@ -328,17 +299,17 @@
 	[NSApp activateIgnoringOtherApps:YES];
 }
 
-- (void)setPanelAccount:(MSGAccount *)account isNew:(BOOL)isNew
+// The new account the open panel is waiting for.
+- (void)setPanelAccount:(MSGAccount *)account
 {
 	[account retain];
 	[_panelAccount release];
 	_panelAccount = account;
-	_panelAccountIsNew = isNew;
 }
 
 - (void)newAccount:(id)sender
 {
-	[self setPanelAccount:nil isNew:NO];
+	[self setPanelAccount:nil];
 	if ([[_registry backendIdentifiers] count] == 0) {
 		[self showAlertWithTitle:@"No services installed"
 			detail:@"Messages found no backends in its PlugIns folder."
@@ -354,9 +325,8 @@
 	if (account == nil) {
 		return;
 	}
-	[self setPanelAccount:nil isNew:NO];
-	[[self accountPanel] prepareForEditingAccount:account];
-	[self presentAccountPanel];
+	[[self preferencesController] showAccount:account];
+	[NSApp activateIgnoringOtherApps:YES];
 }
 
 - (void)connectToPreset:(id)sender
@@ -386,15 +356,7 @@
 - (void)accountPanel:(MSGAccountPanelController *)panel
 	didSubmitBackend:(NSString *)backendIdentifier
 	settings:(NSDictionary *)settings
-	forAccount:(MSGAccount *)account
 {
-	if (account != nil) {
-		[account disconnect];
-		[account updateSettings:settings];
-		[self setPanelAccount:account isNew:NO];
-		[account connect];
-		return;
-	}
 	NSError *error = nil;
 	MSGAccount *created = [_manager addAccountWithBackend:backendIdentifier
 		settings:settings error:&error];
@@ -402,14 +364,14 @@
 		[panel setStatusText:[error localizedDescription]];
 		return;
 	}
-	[self setPanelAccount:created isNew:YES];
+	[self setPanelAccount:created];
 	[created connect];
 }
 
 - (void)accountDidBecomeReady:(NSNotification *)notification
 {
 	if (notification.object == _panelAccount) {
-		[self setPanelAccount:nil isNew:NO];
+		[self setPanelAccount:nil];
 		[_accountPanel close];
 	}
 }
@@ -424,12 +386,16 @@
 	}
 
 	if (account == _panelAccount) {
-		// The user is looking at the form; say it there and let them fix it.
-		if (_panelAccountIsNew) {
-			[_manager removeAccount:account];
-		}
-		[self setPanelAccount:nil isNew:NO];
+		// A new account that never worked is removed again, so the user
+		// fixes the form and a retry starts clean.
+		[_manager removeAccount:account];
+		[self setPanelAccount:nil];
 		[_accountPanel setStatusText:message];
+		return;
+	}
+	if ([_preferencesController isShowingAccount:account]) {
+		// The user is looking at the settings; say it there.
+		[_preferencesController showAccountError:message];
 		return;
 	}
 
@@ -454,6 +420,33 @@
 		detail:[NSString stringWithFormat:@"%@: %@", [account displayName], message]
 		hint:hint];
 	[self editAccount:account];
+	[_preferencesController showAccountError:message];
+}
+
+#pragma mark - Account menu
+
+// Rebuilds the backend section when the selection moves to an account
+// whose backend can do something else; the generic items stay put.
+- (void)selectedAccountDidChange:(NSNotification *)notification
+{
+	MSGAccount *account = notification.userInfo[@"account"];
+	long long capabilities = account ? (long long)[account capabilities] : 0;
+	if (capabilities == _accountMenuCapabilities) {
+		return;
+	}
+	_accountMenuCapabilities = capabilities;
+	while ([_accountMenu numberOfItems] > _accountMenuGenericCount) {
+		[_accountMenu removeItemAtIndex:[_accountMenu numberOfItems] - 1];
+	}
+	NSArray *items = [MSGAccountMenuSection itemsForCapabilities:
+		(MSGCapabilities)capabilities];
+	if ([items count] == 0) {
+		return;
+	}
+	[_accountMenu addItem:[NSMenuItem separatorItem]];
+	for (NSMenuItem *item in items) {
+		[_accountMenu addItem:item];
+	}
 }
 
 - (void)showAlertWithTitle:(NSString *)title detail:(NSString *)detail hint:(NSString *)hint

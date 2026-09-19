@@ -5,32 +5,20 @@
  */
 
 #import "MSGAccountPanelController.h"
-#import "MSGAccount.h"
 #import "MSGBackend.h"
 #import "MSGBackendRegistry.h"
+#import "MSGLayoutMetrics.h"
+#import "MSGSettingsFormView.h"
 
-// Gershwin appearance metrics for a labeled form.
 static const CGFloat MSGPanelWidth = 420.0;
-static const CGFloat MSGSideMargin = 24.0;
-static const CGFloat MSGTopMargin = 15.0;
-static const CGFloat MSGBottomMargin = 12.0;
 static const CGFloat MSGLabelWidth = 110.0;
-static const CGFloat MSGControlGap = 8.0;
-static const CGFloat MSGFieldHeight = 22.0;
-static const CGFloat MSGRowStep = 30.0;
-static const CGFloat MSGCheckboxHeight = 18.0;
-static const CGFloat MSGButtonHeight = 20.0;
-static const CGFloat MSGButtonWidth = 100.0;
-static const CGFloat MSGStatusHeight = 16.0;
 
 @interface MSGAccountPanelController ()
 {
 	MSGBackendRegistry *_registry;
 	NSString *_backendIdentifier;
 	NSPopUpButton *_backendPopUp;
-	// settings key -> NSTextField or NSButton
-	NSMutableDictionary *_controls;
-	NSArray *_fields;
+	MSGSettingsFormView *_form;
 	NSTextField *_statusLabel;
 }
 @end
@@ -43,13 +31,13 @@ static const CGFloat MSGStatusHeight = 16.0;
 		NSMakeRect(0, 0, MSGPanelWidth, 200)
 		styleMask:(NSTitledWindowMask | NSClosableWindowMask)
 		backing:NSBackingStoreBuffered defer:NO];
+	[window setTitle:@"New Account"];
 	// The controller reuses its window across close/show cycles.
 	[window setReleasedWhenClosed:NO];
 	self = [super initWithWindow:window];
 	[window release];
 	if (self) {
 		_registry = [registry retain];
-		_controls = [[NSMutableDictionary alloc] init];
 	}
 	return self;
 }
@@ -59,30 +47,15 @@ static const CGFloat MSGStatusHeight = 16.0;
 	[_registry release];
 	[_backendIdentifier release];
 	[_backendPopUp release];
-	[_controls release];
-	[_fields release];
+	[_form release];
 	[_statusLabel release];
-	[_account release];
 	[super dealloc];
 }
 
-#pragma mark - Preparing
-
 - (void)prepareForNewAccountWithBackend:(NSString *)backendIdentifier
 {
-	[_account release];
-	_account = nil;
 	NSString *backend = backendIdentifier ?: [[_registry backendIdentifiers] firstObject];
-	[self buildFormForBackend:backend settings:nil];
-	[[self window] setTitle:@"New Account"];
-}
-
-- (void)prepareForEditingAccount:(MSGAccount *)account
-{
-	[_account release];
-	_account = [account retain];
-	[self buildFormForBackend:account.backendIdentifier settings:account.settings];
-	[[self window] setTitle:[NSString stringWithFormat:@"Edit %@", [account displayName]]];
+	[self buildFormForBackend:backend];
 }
 
 - (void)setStatusText:(NSString *)text
@@ -105,29 +78,44 @@ static const CGFloat MSGStatusHeight = 16.0;
 	return [label autorelease];
 }
 
-- (CGFloat)heightForFields:(NSArray *)fields
+- (NSButton *)buttonWithTitle:(NSString *)title x:(CGFloat)x action:(SEL)action
 {
-	CGFloat rows = MSGRowStep * [fields count];
-	// Service pop-up row, the field rows, a 20px gap, the button row and the
-	// status line.
-	return MSGTopMargin + MSGFieldHeight + rows + 20.0 + MSGButtonHeight
-		+ MSGBottomMargin + MSGStatusHeight + MSGBottomMargin;
+	NSButton *button = [[[NSButton alloc] initWithFrame:NSMakeRect(x,
+		MSGMetricsBottomMargin + MSGMetricsStatusHeight + MSGMetricsGroupGap,
+		MSGMetricsButtonWidth, MSGMetricsButtonHeight)] autorelease];
+	[button setBezelStyle:NSRoundedBezelStyle];
+	[button setTitle:title];
+	[button setTarget:self];
+	[button setAction:action];
+	[button setAutoresizingMask:NSViewMinXMargin | NSViewMaxYMargin];
+	return button;
 }
 
-- (void)buildFormForBackend:(NSString *)backendIdentifier settings:(NSDictionary *)settings
+- (void)buildFormForBackend:(NSString *)backendIdentifier
 {
 	Class backend = [_registry backendClassForIdentifier:backendIdentifier];
 	[_backendIdentifier release];
 	_backendIdentifier = [backendIdentifier copy];
-	[_fields release];
-	_fields = [[backend accountSettingFields] copy] ?: [[NSArray alloc] init];
-	[_controls removeAllObjects];
+	NSArray *fields = [backend accountSettingFields] ?: @[];
+	CGFloat contentWidth = MSGPanelWidth - 2.0 * MSGMetricsSideMargin;
 
-	NSWindow *window = [self window];
-	CGFloat height = [self heightForFields:_fields];
+	// Service row, the form, a 20px gap, the buttons and the status line.
+	CGFloat formHeight = [MSGSettingsFormView heightForFields:fields];
+	CGFloat height = MSGMetricsTopMargin + MSGMetricsFieldHeight
+		+ ([fields count] ? MSGMetricsControlGap + formHeight : 0.0)
+		+ 20.0 + MSGMetricsButtonHeight + MSGMetricsGroupGap
+		+ MSGMetricsStatusHeight + MSGMetricsBottomMargin;
+
 	// Keep the top edge in place while the height follows the backend.
-	NSRect frame = [window frame];
-	NSRect content = [window contentRectForFrameRect:frame];
+	// The window manager ignores size changes of a window on screen, which
+	// left the form laid out for a taller window and the buttons over its
+	// last row; a window taken off screen gets the new size when it returns.
+	NSWindow *window = [self window];
+	BOOL visible = [window isVisible];
+	if (visible) {
+		[window orderOut:self];
+	}
+	NSRect content = [window contentRectForFrameRect:[window frame]];
 	CGFloat top = NSMaxY(content);
 	content.size = NSMakeSize(MSGPanelWidth, height);
 	content.origin.y = top - height;
@@ -137,15 +125,14 @@ static const CGFloat MSGStatusHeight = 16.0;
 		NSMakeRect(0, 0, MSGPanelWidth, height)] autorelease];
 	[window setContentView:view];
 
-	CGFloat fieldX = MSGSideMargin + MSGLabelWidth + MSGControlGap;
-	CGFloat fieldW = MSGPanelWidth - fieldX - MSGSideMargin;
-	CGFloat y = height - MSGTopMargin - MSGFieldHeight;
-
-	[view addSubview:[self labelWithTitle:@"Service:"
-		frame:NSMakeRect(MSGSideMargin, y + 3.0, MSGLabelWidth, 17.0)]];
+	CGFloat fieldX = MSGMetricsSideMargin + MSGLabelWidth + MSGMetricsControlGap;
+	CGFloat y = height - MSGMetricsTopMargin - MSGMetricsFieldHeight;
+	[view addSubview:[self labelWithTitle:@"Service:" frame:NSMakeRect(
+		MSGMetricsSideMargin, y + 3.0, MSGLabelWidth, MSGMetricsLabelHeight)]];
 	[_backendPopUp release];
-	_backendPopUp = [[NSPopUpButton alloc] initWithFrame:
-		NSMakeRect(fieldX, y, fieldW, MSGFieldHeight) pullsDown:NO];
+	_backendPopUp = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(fieldX, y,
+		MSGPanelWidth - MSGMetricsSideMargin - fieldX, MSGMetricsFieldHeight)
+		pullsDown:NO];
 	for (NSString *identifier in [_registry backendIdentifiers]) {
 		[_backendPopUp addItemWithTitle:[_registry displayNameForBackend:identifier]];
 		[[_backendPopUp lastItem] setRepresentedObject:identifier];
@@ -154,78 +141,31 @@ static const CGFloat MSGStatusHeight = 16.0;
 		[_backendPopUp indexOfItemWithRepresentedObject:backendIdentifier]];
 	[_backendPopUp setTarget:self];
 	[_backendPopUp setAction:@selector(backendChanged:)];
-	// The backend of an existing account is fixed; its settings only make
-	// sense for that backend.
-	[_backendPopUp setEnabled:(_account == nil)];
 	[_backendPopUp setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
 	[view addSubview:_backendPopUp];
 
-	NSView *firstControl = nil;
-	NSView *previous = _backendPopUp;
-	for (NSDictionary *field in _fields) {
-		y -= MSGRowStep;
-		NSString *key = field[MSGSettingFieldKey];
-		NSString *type = field[MSGSettingFieldType];
-		id value = settings[key] ?: field[MSGSettingFieldDefault];
-		NSView *control;
-		if ([type isEqualToString:MSGSettingFieldTypeCheckbox]) {
-			NSButton *box = [[[NSButton alloc] initWithFrame:
-				NSMakeRect(fieldX, y + (MSGFieldHeight - MSGCheckboxHeight) / 2.0,
-					fieldW, MSGCheckboxHeight)] autorelease];
-			[box setButtonType:NSSwitchButton];
-			[box setTitle:field[MSGSettingFieldLabel]];
-			[box setState:[value boolValue] ? NSOnState : NSOffState];
-			control = box;
-		} else {
-			[view addSubview:[self labelWithTitle:field[MSGSettingFieldLabel]
-				frame:NSMakeRect(MSGSideMargin, y + 3.0, MSGLabelWidth, 17.0)]];
-			Class fieldClass = [type isEqualToString:MSGSettingFieldTypeSecure]
-				? [NSSecureTextField class] : [NSTextField class];
-			NSTextField *text = [[[fieldClass alloc] initWithFrame:
-				NSMakeRect(fieldX, y, fieldW, MSGFieldHeight)] autorelease];
-			[text setStringValue:value ? [value description] : @""];
-			if (field[MSGSettingFieldPlaceholder]) {
-				[text setPlaceholderString:field[MSGSettingFieldPlaceholder]];
-			}
-			control = text;
-			if (firstControl == nil && [[text stringValue] length] == 0) {
-				firstControl = text;
-			}
-		}
-		[control setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
-		[view addSubview:control];
-		[previous setNextKeyView:control];
-		previous = control;
-		_controls[key] = control;
-	}
+	[_form release];
+	_form = [[MSGSettingsFormView alloc] initWithFields:fields width:contentWidth
+		labelWidth:MSGLabelWidth];
+	[_form setFrameOrigin:NSMakePoint(MSGMetricsSideMargin,
+		y - MSGMetricsControlGap - formHeight)];
+	[_form setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
+	[view addSubview:_form];
 
-	NSButton *connect = [[[NSButton alloc] initWithFrame:
-		NSMakeRect(MSGPanelWidth - MSGSideMargin - MSGButtonWidth,
-			MSGBottomMargin + MSGStatusHeight + MSGBottomMargin,
-			MSGButtonWidth, MSGButtonHeight)] autorelease];
-	[connect setBezelStyle:NSRoundedBezelStyle];
-	[connect setTitle:@"Connect"];
+	NSButton *connect = [self buttonWithTitle:@"Connect"
+		x:MSGPanelWidth - MSGMetricsSideMargin - MSGMetricsButtonWidth
+		action:@selector(connect:)];
 	[connect setKeyEquivalent:@"\r"];
-	[connect setTarget:self];
-	[connect setAction:@selector(connect:)];
-	[connect setAutoresizingMask:NSViewMinXMargin | NSViewMaxYMargin];
 	[view addSubview:connect];
-
-	NSButton *cancel = [[[NSButton alloc] initWithFrame:
-		NSMakeRect(NSMinX([connect frame]) - MSGControlGap - MSGButtonWidth,
-			NSMinY([connect frame]), MSGButtonWidth, MSGButtonHeight)] autorelease];
-	[cancel setBezelStyle:NSRoundedBezelStyle];
-	[cancel setTitle:@"Cancel"];
+	NSButton *cancel = [self buttonWithTitle:@"Cancel"
+		x:NSMinX([connect frame]) - MSGMetricsGroupGap - MSGMetricsButtonWidth
+		action:@selector(cancel:)];
 	[cancel setKeyEquivalent:@"\e"];
-	[cancel setTarget:self];
-	[cancel setAction:@selector(cancel:)];
-	[cancel setAutoresizingMask:NSViewMinXMargin | NSViewMaxYMargin];
 	[view addSubview:cancel];
 
 	[_statusLabel release];
-	_statusLabel = [[NSTextField alloc] initWithFrame:
-		NSMakeRect(MSGSideMargin, MSGBottomMargin,
-			MSGPanelWidth - 2.0 * MSGSideMargin, MSGStatusHeight)];
+	_statusLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(MSGMetricsSideMargin,
+		MSGMetricsBottomMargin, contentWidth, MSGMetricsStatusHeight)];
 	[_statusLabel setEditable:NO];
 	[_statusLabel setSelectable:NO];
 	[_statusLabel setBezeled:NO];
@@ -238,8 +178,14 @@ static const CGFloat MSGStatusHeight = 16.0;
 	[_statusLabel setAutoresizingMask:NSViewMaxYMargin | NSViewWidthSizable];
 	[view addSubview:_statusLabel];
 
-	[previous setNextKeyView:_backendPopUp];
-	[window makeFirstResponder:firstControl ?: (NSView *)_backendPopUp];
+	[_backendPopUp setNextKeyView:[_form firstControl] ?: (NSView *)connect];
+	[[_form lastControl] setNextKeyView:cancel];
+	[cancel setNextKeyView:connect];
+	[connect setNextKeyView:_backendPopUp];
+	[window makeFirstResponder:[_form firstEmptyControl] ?: (NSView *)_backendPopUp];
+	if (visible) {
+		[window makeKeyAndOrderFront:self];
+	}
 }
 
 #pragma mark - Actions
@@ -248,51 +194,18 @@ static const CGFloat MSGStatusHeight = 16.0;
 {
 	NSString *identifier = [[_backendPopUp selectedItem] representedObject];
 	if (![identifier isEqualToString:_backendIdentifier]) {
-		[self buildFormForBackend:identifier settings:nil];
+		[self buildFormForBackend:identifier];
 	}
-}
-
-- (NSDictionary *)settingsFromForm
-{
-	NSMutableDictionary *settings = [NSMutableDictionary dictionary];
-	if (_account) {
-		// Keeps what the form does not show, such as a stored token.
-		[settings addEntriesFromDictionary:_account.settings];
-	}
-	for (NSDictionary *field in _fields) {
-		NSString *key = field[MSGSettingFieldKey];
-		NSString *type = field[MSGSettingFieldType];
-		id control = _controls[key];
-		if ([type isEqualToString:MSGSettingFieldTypeCheckbox]) {
-			settings[key] = @([control state] == NSOnState);
-			continue;
-		}
-		NSString *text = [[control stringValue] stringByTrimmingCharactersInSet:
-			[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-		if ([text length] == 0) {
-			[settings removeObjectForKey:key];
-		} else if ([type isEqualToString:MSGSettingFieldTypeNumber]) {
-			settings[key] = @([text integerValue]);
-		} else {
-			settings[key] = text;
-		}
-	}
-	return settings;
 }
 
 - (void)connect:(id)sender
 {
-	NSDictionary *settings = [self settingsFromForm];
-	for (NSDictionary *field in _fields) {
-		if ([field[MSGSettingFieldRequired] boolValue] &&
-			settings[field[MSGSettingFieldKey]] == nil) {
-			NSString *label = [field[MSGSettingFieldLabel]
-				stringByTrimmingCharactersInSet:
-					[NSCharacterSet characterSetWithCharactersInString:@":"]];
-			[self setStatusText:[NSString stringWithFormat:@"Please fill in %@.", label]];
-			return;
-		}
+	NSString *missing = [_form missingRequiredFieldLabel];
+	if (missing != nil) {
+		[self setStatusText:[NSString stringWithFormat:@"Please fill in %@.", missing]];
+		return;
 	}
+	NSDictionary *settings = [_form settingsByMergingInto:@{}];
 	Class backend = [_registry backendClassForIdentifier:_backendIdentifier];
 	if ([backend respondsToSelector:@selector(validationErrorForSettings:)]) {
 		NSString *problem = [backend validationErrorForSettings:settings];
@@ -302,8 +215,7 @@ static const CGFloat MSGStatusHeight = 16.0;
 		}
 	}
 	[self setStatusText:@"Connecting..."];
-	[_delegate accountPanel:self didSubmitBackend:_backendIdentifier
-		settings:settings forAccount:_account];
+	[_delegate accountPanel:self didSubmitBackend:_backendIdentifier settings:settings];
 }
 
 - (void)cancel:(id)sender

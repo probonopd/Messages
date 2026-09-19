@@ -9,6 +9,11 @@
 #import "MSGChannel.h"
 #import "MSGNetwork.h"
 #import "MSGUser.h"
+#import "MSGProtocol.h"
+
+// What the capability-less entry points assume: the full IRC bouncer set
+// the menus were modelled on.
+static const MSGCapabilities MSGContextMenuAllCapabilities = (MSGCapabilities)~0UL;
 
 @class MSGContextMenuBuilder;
 
@@ -45,6 +50,21 @@
 	channel:(MSGChannel *)channel
 	network:(MSGNetwork *)network
 	myNick:(NSString *)myNick
+	delegate:(id<MSGContextMenuActionDelegate>)delegate;
+
+// As above, leaving out what the backend cannot do. The user menu is nil
+// without MSGCapabilityIRCCommands.
++ (NSMenu *)channelMenuForChannel:(MSGChannel *)channel
+	network:(MSGNetwork *)network
+	myNick:(NSString *)myNick
+	capabilities:(MSGCapabilities)capabilities
+	delegate:(id<MSGContextMenuActionDelegate>)delegate;
+
++ (NSMenu *)userMenuForUser:(MSGUser *)user
+	channel:(MSGChannel *)channel
+	network:(MSGNetwork *)network
+	myNick:(NSString *)myNick
+	capabilities:(MSGCapabilities)capabilities
 	delegate:(id<MSGContextMenuActionDelegate>)delegate;
 
 @end

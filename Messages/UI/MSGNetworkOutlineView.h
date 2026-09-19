@@ -25,7 +25,6 @@
 	NSOutlineView *_outlineView;
 	MSGServerState *_serverState;
 	NSInteger _selectedChannelId;
-	BOOL _selectedItemIsNetworkRow;
 	id<MSGNetworkOutlineViewDelegate> _delegate;
 }
 
@@ -35,5 +34,7 @@
 
 - (void)reloadData;
 - (void)selectChannelId:(NSInteger)channelId;
+// The highlighted row's MSGNetwork or MSGChannel, nil when none.
+- (id)selectedItem;
 
 @end

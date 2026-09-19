@@ -15,10 +15,6 @@
 //  and cores refuse a plaintext session outright (verified: UseSsl=false gets
 //  ClientInitReject).
 //
-//  Why not CFStream: libs-corebase has no TLS code at all, and
-//  CFStreamCreatePairWithSocketToHost is an empty function body
-//  (libs-corebase/Source/CFStream.c:336).
-//
 //  So the fd is ours, and GSTLSSession rides on it via push/pull callbacks.
 //  That reuses GNUstep's tested GnuTLS integration rather than hand-rolling
 //  gnutls calls, and honours the usual GSTLS* options.
@@ -26,7 +22,8 @@
 //  Modified for Messages (2026): the 10 ms polling NSTimer is replaced by
 //  run-loop descriptor watchers, getaddrinfo() runs on a helper thread, the
 //  connect has a timeout, and TLS data GnuTLS already decrypted is drained
-//  without waiting for the descriptor. No GCD and no CoreFoundation.
+//  without waiting for the descriptor. No libdispatch and no libs-corebase;
+//  comments reworded, TLS key renamed.
 //
 
 #import "QuasselSocket.h"
@@ -44,9 +41,8 @@
 #include <string.h>
 #include <poll.h>
 
-// Declared in the GCDAsyncSocket compatibility shim. CFNetwork does not exist
-// here, so the key is a plain NSString with the same name.
-NSString * const kCFStreamSSLValidatesCertificateChain = @"kCFStreamSSLValidatesCertificateChain";
+// Declared in the GCDAsyncSocket compatibility shim.
+NSString * const QuasselTLSValidatesCertificateChain = @"QuasselTLSValidatesCertificateChain";
 
 static NSString * const QuasselSocketErrorDomain = @"QuasselSocketErrorDomain";
 
@@ -288,7 +284,7 @@ static NSArray *QSRunLoopModes(void)
 {
     if (_fd < 0 || _state == QSStateClosed) return;
 
-    id validates = [tlsSettings objectForKey:kCFStreamSSLValidatesCertificateChain];
+    id validates = [tlsSettings objectForKey:QuasselTLSValidatesCertificateChain];
     BOOL validateChain = (validates == nil) || [validates boolValue];
 
     NSMutableDictionary *opts = [NSMutableDictionary dictionary];

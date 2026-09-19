@@ -1,0 +1,28 @@
+Licensing of the Quassel backend
+================================
+
+Engine/ and Transport/ (and Tests/Fixtures/quassel_mockcore.py in this
+repository) are third-party files from iQuassel:
+
+- the Quassel protocol engine of iQuassel by Woboq GmbH and contributors,
+  https://github.com/woboq/iquassel
+- its GNUstep port, including the socket in Transport/ and the mock core,
+  by pkgdemon, https://github.com/pkgdemon/iquassel/tree/gnustep-native
+  (commit d066f517e4c46008420dc39c7d55fafd0913d811)
+
+The files carry the notice "Dual-Licensed, GPLv3 and Woboq GmbH's private
+license. See file LICENSE". The upstream license statement,
+https://github.com/pkgdemon/iquassel/blob/gnustep-native/LICENSE, releases
+them under the GNU General Public License version 3.0 and, as an
+alternative, lets Woboq GmbH (Berlin, Germany) or its successors publish
+them on their own terms. That alternative is available to Woboq GmbH only.
+
+Messages uses and distributes these files under the GNU General Public
+License version 3 only (SPDX: GPL-3.0-only); the full text is in COPYING.
+Every file changed for Messages says so in a comment at its top.
+
+The other files of this bundle (Backend/, the GNUmakefiles, *Info.plist)
+were written for Messages and are licensed "BSD-2-Clause OR
+GPL-3.0-or-later". Because Quassel.msgbackend is built from the GPL files
+above, the bundle as a whole, and any build of Messages.app that includes
+it, is distributed under the GPL version 3.

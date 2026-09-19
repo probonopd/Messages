@@ -90,7 +90,7 @@ protocol as the contract.
 Messages.app (AppKit UI)          Messages.app/PlugIns/*.msgbackend
       |                             TheLounge.msgbackend  (BSD-2-Clause)
       |                             Nosterm.msgbackend    (BSD-2-Clause)
-      v                             Quassel.msgbackend    (GPL-3.0)
+      v                             Quassel.msgbackend    (GPL-3.0-only)
 MessagesKit.framework  <---------------/
 (model, backend API, account manager, WebSocket transport, preferences)
 ```
@@ -171,34 +171,56 @@ in `accounts.plist` unchanged, so it returns with the backend.
 
 ### Messages.app
 
-UI and orchestration only: the account panel (form rendered from
-`+accountSettingFields`), the main window over `combinedState`, account
-errors (an account that never worked is removed again when it fails from
-the panel; a restored account reconnects silently; authentication and
-protocol errors reopen the account's settings). No backend header is
-imported.
+UI and orchestration only; no backend header is imported.
+
+- Settings: `MSGSettingsFormView` renders a backend's
+  `+accountSettingFields`; the New Account panel and the Accounts tab of
+  Preferences (account list with +/-, the form, "Connect when Messages
+  starts", status, Revert/Apply) both use it. Apply reconnects an account
+  that was online; unapplied edits are resolved (Apply, Don't Apply,
+  Cancel) before switching account or tab, or closing the window.
+- Menus: File (New Account, backend presets), Conversation (join, leave,
+  mute, clear history) and the generic top of the Account menu (connect,
+  settings, remove) are the same for every backend. The rest of the
+  Account menu (`MSGAccountMenuSection`) is rebuilt from the selected
+  account's capabilities whenever the selection moves to an account whose
+  backend can do something else, so another backend's commands never
+  show; `-validateMenuItem:` in the main window then disables what the
+  selected channel or user does not allow. Context menus are built from
+  the same capabilities. The section is rebuilt on selection change
+  rather than in `-menuNeedsUpdate:` because Gershwin's global menu bar
+  mirrors the menus into another process.
+- Errors: an account that never worked is removed again when it fails
+  from the New Account panel; a restored account reconnects silently;
+  after Apply the account is treated as new, so a failure is shown in the
+  Accounts tab; authentication and protocol errors open the account's
+  settings.
+- Layout constants: `Messages/UI/MSGLayoutMetrics.h` mirrors the Gershwin
+  appearance metrics used by the hand-built windows.
 
 ### Quassel backend
 
 - Origin: <https://github.com/pkgdemon/iquassel/tree/gnustep-native> at
   d066f517 (the iQuassel protocol engine by Woboq GmbH and contributors,
-  with a GNUstep socket by the port's author). `Engine/` and `Transport/`
-  are upstream files with their headers unchanged; every modified file says
-  so at the top.
-- License: GPL-3.0 (`COPYING`, `LICENSE.iquassel`). New files in the bundle
-  are `BSD-2-Clause OR GPL-3.0-or-later`. MessagesKit and the app stay
-  BSD-2-Clause; loaded in-process, the distributed combination is covered
-  by GPL-3.0, which BSD-2-Clause permits. Keeping Quassel in its own bundle
-  confines that and allows packaging it separately.
+  with a GNUstep socket by the port's author, pkgdemon). `Engine/` and
+  `Transport/` are upstream files with their headers unchanged; every
+  modified file says so at the top.
+- License: see `Backends/Quassel/LICENSE`. Upstream is dual-licensed (GPL
+  version 3, or Woboq GmbH's own terms, which only Woboq can use);
+  Messages uses the upstream files under GPL-3.0-only (`COPYING`). Files
+  written for Messages in the bundle are `BSD-2-Clause OR
+  GPL-3.0-or-later`. MessagesKit and the app stay BSD-2-Clause; loaded
+  in-process, the distributed combination is covered by GPL-3.0, which
+  BSD-2-Clause permits. Keeping Quassel in its own bundle confines that and
+  allows packaging it separately.
 - Memory model: upstream keeps ARC. `Engine/GNUmakefile` builds engine and
   socket as a `subproject.make` with `-fobjc-arc`; the glue in `Backend/`
   is MRC like the rest of Messages. The engine holds its delegate strongly
   (the glue clears it when closing) and does not keep itself alive during
   its own callbacks (the glue autoreleases it instead of releasing).
-- No GCD: the engine's serial queue is removed (the socket runs on the main
-  run loop). No CoreFoundation: `Transport/QuasselCompat.h` maps the
-  engine's `CFSwapInt*` byte-order calls to Foundation's `NSSwap*` and is
-  force-included into the upstream sources only.
+- No libdispatch: the engine's serial queue is removed (the socket runs on
+  the main run loop). No libs-corebase: the engine's byte-order calls use
+  Foundation's `NSSwap*` functions.
 - Socket: the upstream 10 ms polling timer is replaced by run-loop
   descriptor watchers (`-[NSRunLoop addEvent:type:watcher:forMode:]`, also
   in modal and tracking modes), `getaddrinfo()` runs on a helper thread (a

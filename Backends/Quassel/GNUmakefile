@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Simon Peter
+#
+# SPDX-License-Identifier: BSD-2-Clause OR GPL-3.0-or-later
+
 GNUSTEP_INSTALLATION_DOMAIN = SYSTEM
 
 include $(GNUSTEP_MAKEFILES)/common.make
@@ -20,5 +24,8 @@ ADDITIONAL_INCLUDE_DIRS += -IBackend -IEngine -ITransport
 ADDITIONAL_OBJCFLAGS += -Wno-objc-property-matches-cocoa-ownership-rule
 
 Quassel_BUNDLE_LIBS += $(MSGKIT_LIBS) -lz
+
+# The GPL requires the license to travel with the binary.
+Quassel_RESOURCE_FILES = COPYING LICENSE
 
 include $(GNUSTEP_MAKEFILES)/bundle.make

@@ -1,9 +1,9 @@
 // Dual-Licensed, GPLv3 and Woboq GmbH's private license. See file "LICENSE"
-// Modified for Messages (2026): GCD removed (the socket is driven by the
-// main run loop, so no dispatch queues are needed) and the TLS option passed
-// as @NO instead of CoreFoundation's kCFBooleanFalse; compiler warnings
-// fixed (unused loop, shadowed ivar, format specifiers); an empty backlog
-// reply is reported to the delegate (-quasselBacklogReceivedForBuffer:...).
+// Modified for Messages (2026): the dispatch queue is removed (the socket is
+// driven by the main run loop), the TLS option is passed as @NO, byte order
+// uses Foundation's NSSwap* functions, compiler warnings are fixed (unused
+// loop, shadowed ivar, format specifiers), and every backlog reply is
+// reported to the delegate (-quasselBacklogReceivedForBuffer:...).
 
 #import "QuasselCoreConnection.h"
 #import "QVariant.h"
@@ -185,14 +185,14 @@
 - (void) handleReceivedNetworkInit:(NSArray*)networkInit
 {
     /*
-     2014-01-08 15:37:46.114 quassel-for-ios[14002:70b] isConnected => QVariant(boolean(YES))
+     2014-01-08 15:37:46.114 iquassel[14002:70b] isConnected => QVariant(boolean(YES))
 
-     2014-01-08 15:37:46.114 quassel-for-ios[14002:70b] myNick => QVariant(string(guruz))
-
-
+     2014-01-08 15:37:46.114 iquassel[14002:70b] myNick => QVariant(string(guruz))
 
 
-     012-09-14 13:33:47.984 quassel-for-ios[8471:707] ...list (
+
+
+     012-09-14 13:33:47.984 iquassel[8471:707] ...list (
      "QVariant(integer(4))",
      "QVariant(byteArray(7))",
      "QVariant(string(7))",
@@ -303,9 +303,9 @@
 
         // Compressed data als qbytearrayraushauen!
 
-        int length = CFSwapInt32HostToBig(compressedData.length+4);
+        int length = NSSwapHostIntToBig(compressedData.length+4);
         NSData *lengthData = [NSData dataWithBytes:&length length:sizeof(length)];
-        int compressedLength = CFSwapInt32HostToBig(compressedData.length);
+        int compressedLength = NSSwapHostIntToBig(compressedData.length);
         NSData *compressedLengthData = [NSData dataWithBytes:(char*)&compressedLength length:4];
 
         NSMutableData *whole = [NSMutableData dataWithData:lengthData];
@@ -316,7 +316,7 @@
     } else {
         //data = serializedQVariant;
         // 2. Send the size of something as UInt (this is quassel-protocol)
-        int length = CFSwapInt32HostToBig(serializedQVariant.length);
+        int length = NSSwapHostIntToBig(serializedQVariant.length);
         NSData *lengthData = [NSData dataWithBytes:&length length:sizeof(length)];
 
         NSMutableData *whole = [NSMutableData dataWithData:lengthData];
@@ -390,7 +390,7 @@
                     [socket performBlock:^{
                         NSLog(@"calling startTLS");
                         NSDictionary *sslDict = [NSDictionary dictionaryWithObjectsAndKeys:
-                                                 @NO, (id)kCFStreamSSLValidatesCertificateChain,
+                                                 @NO, (id)QuasselTLSValidatesCertificateChain,
                                                  nil];
                         [socket startTLS:sslDict];
                         NSLog(@"%@ %@", socket.debugDescription, socket.description);
@@ -543,43 +543,43 @@
             if (requestType == Sync) { // 1
                 //NSLog(@"...Sync");
                 /*
-                 2012-07-18 14:29:47.240 quassel-for-ios[42671:707] ...list (
+                 2012-07-18 14:29:47.240 iquassel[42671:707] ...list (
                  "<QVariant: 0x2a2400> integer = 1",
                  "<QVariant: 0x275450> string = IrcUser",
                  "<QVariant: 0x2ac0f0> string = 4/mf2hd",
                  "<QVariant: 0x2a1e20> byte array with 7 bytes",
                  "<QVariant: 0x2a2100> boolean = NO"
                  )
-                 2012-07-18 14:29:47.242 quassel-for-ios[42671:707] ...Sync
-                 2012-07-18 14:29:47.243 quassel-for-ios[42671:707] Remote wants to invoke setAway (object=4/mf2hd, class=IrcUser)
+                 2012-07-18 14:29:47.242 iquassel[42671:707] ...Sync
+                 2012-07-18 14:29:47.243 iquassel[42671:707] Remote wants to invoke setAway (object=4/mf2hd, class=IrcUser)
                  */
                 /*
-                 2012-07-18 14:30:09.877 quassel-for-ios[42671:707] ...list (
+                 2012-07-18 14:30:09.877 iquassel[42671:707] ...list (
                  "<QVariant: 0x2a1d00> integer = 1",
                  "<QVariant: 0x2ac0f0> string = IrcUser",
                  "<QVariant: 0x2a2400> string = 4/meric",
                  "<QVariant: 0x2a1fc0> byte array with 7 bytes",
                  "<QVariant: 0x292380> string = meric"
                  )
-                 2012-07-18 14:30:09.878 quassel-for-ios[42671:707] ...Sync
-                 2012-07-18 14:30:09.880 quassel-for-ios[42671:707] Remote wants to invoke setNick (object=4/meric, class=IrcUser)
+                 2012-07-18 14:30:09.878 iquassel[42671:707] ...Sync
+                 2012-07-18 14:30:09.880 iquassel[42671:707] Remote wants to invoke setNick (object=4/meric, class=IrcUser)
                  */
                 /*
-                 2012-07-18 14:53:56.935 quassel-for-ios[42741:707] ...Sync
-                 2012-07-18 14:53:56.937 quassel-for-ios[42741:707] Remote wants to invoke setServer (object=4/cjanssen, class=IrcUser)
-                 2012-07-18 14:53:56.938 quassel-for-ios[42741:707] QuasselCoreConnection handleEvent next block has 115 bytes, input data length is 119 bytes
-                 2012-07-18 14:53:56.940 quassel-for-ios[42741:707] ...list (
+                 2012-07-18 14:53:56.935 iquassel[42741:707] ...Sync
+                 2012-07-18 14:53:56.937 iquassel[42741:707] Remote wants to invoke setServer (object=4/cjanssen, class=IrcUser)
+                 2012-07-18 14:53:56.938 iquassel[42741:707] QuasselCoreConnection handleEvent next block has 115 bytes, input data length is 119 bytes
+                 2012-07-18 14:53:56.940 iquassel[42741:707] ...list (
                  "QVariant(integer(1))",
                  "QVariant(string(IrcUser))",
                  "QVariant(string(4/cjanssen))",
                  "QVariant(byteArray(11))",
                  "QVariant(string(cjanssen))"
                  )
-                 2012-07-18 14:53:56.942 quassel-for-ios[42741:707] ...Sync
-                 2012-07-18 14:53:56.943 quassel-for-ios[42741:707] Remote wants to invoke setRealName (object=4/cjanssen, class=IrcUser)
-                 2012-07-18 14:54:07.578 quassel-for-ios[42741:707] QuasselCoreConnection handleEvent next block has 27 bytes, input data length is 31 bytes
-                 2012-07-18 14:54:07.581 quassel-for-ios[42741:707] Deserializing time
-                 2012-07-18 14:54:07.583 quassel-for-ios[42741:707] ...list (
+                 2012-07-18 14:53:56.942 iquassel[42741:707] ...Sync
+                 2012-07-18 14:53:56.943 iquassel[42741:707] Remote wants to invoke setRealName (object=4/cjanssen, class=IrcUser)
+                 2012-07-18 14:54:07.578 iquassel[42741:707] QuasselCoreConnection handleEvent next block has 27 bytes, input data length is 31 bytes
+                 2012-07-18 14:54:07.581 iquassel[42741:707] Deserializing time
+                 2012-07-18 14:54:07.583 iquassel[42741:707] ...list (
                  "QVariant(integer(5))",
                  "QVariant(FIXME)"
                  )
@@ -587,15 +587,15 @@
 
 
                 /*
-                 2012-07-19 22:04:34.341 quassel-for-ios[44351:707] ...list (
+                 2012-07-19 22:04:34.341 iquassel[44351:707] ...list (
                  "QVariant(integer(1))",
                  "QVariant(string(BufferSyncer))",
                  "QVariant(string())",
                  "QVariant(byteArray(16))",
                  "QVariant(BufferId(248))"
                  )
-                 2012-07-19 22:04:34.342 quassel-for-ios[44351:707] ...Sync
-                 2012-07-19 22:04:34.344 quassel-for-ios[44351:707] Remote wants to invoke markBufferAsRead (object=, class=BufferSyncer)
+                 2012-07-19 22:04:34.342 iquassel[44351:707] ...Sync
+                 2012-07-19 22:04:34.344 iquassel[44351:707] Remote wants to invoke markBufferAsRead (object=, class=BufferSyncer)
                  */
                 NSString *className = [[v.list objectAtIndex:1] asStringFromStringOrByteArray];
                 NSString *objectName = [[v.list objectAtIndex:2] asStringFromStringOrByteArray];
@@ -628,7 +628,7 @@
                     }
                 } else if ([className isEqualToString:@"BufferSyncer"]) {
                     if ([functionName isEqualToString:@"setLastSeenMsg"]) {
-                        /* 2012-07-18 14:28:51.870 quassel-for-ios[42671:707] ...list (
+                        /* 2012-07-18 14:28:51.870 iquassel[42671:707] ...list (
                          "<QVariant: 0x292380> integer = 1",
                          "<QVariant: 0x275450> string = BufferSyncer",
                          "<QVariant: 0x2ac0f0> string = ",
@@ -659,7 +659,7 @@
                            [objectName isEqualToString:bufferViewConfigId]) {
                     if ([functionName isEqualToString:@"addBuffer"]) {
                         /*
-                         2012-07-19 22:02:54.529 quassel-for-ios[44351:707] ...list (
+                         2012-07-19 22:02:54.529 iquassel[44351:707] ...list (
                          "QVariant(integer(1))",                       0
                          "QVariant(string(BufferViewConfig))",         1
                          "QVariant(string(0))",                        2
@@ -667,8 +667,8 @@
                          "QVariant(BufferId(258))",                    4
                          "QVariant(integer(6))" // position
                          )
-                         2012-07-19 22:02:54.530 quassel-for-ios[44351:707] ...Sync
-                         2012-07-19 22:02:54.532 quassel-for-ios[44351:707] Remote wants to invoke addBuffer (object=0, class=BufferViewConfig)
+                         2012-07-19 22:02:54.530 iquassel[44351:707] ...Sync
+                         2012-07-19 22:02:54.532 iquassel[44351:707] Remote wants to invoke addBuffer (object=0, class=BufferViewConfig)
                          */
                         BufferId *bufferId = [[v.list objectAtIndex:4] bufferId];
                         NetworkId *networkId = [[bufferIdBufferInfoMap objectForKey:bufferId] networkId];
@@ -683,15 +683,15 @@
                         }
                     } else if ([functionName isEqualToString:@"removeBufferPermanently"]) {
                         /*
-                         2012-07-19 22:30:08.830 quassel-for-ios[44375:707] ...list (
+                         2012-07-19 22:30:08.830 iquassel[44375:707] ...list (
                          "QVariant(integer(1))",
                          "QVariant(string(BufferViewConfig))",
                          "QVariant(string(0))",
                          "QVariant(byteArray(23))",
                          "QVariant(BufferId(259))"
                          )
-                         2012-07-19 22:30:08.831 quassel-for-ios[44375:707] ...Sync
-                         2012-07-19 22:30:08.833 quassel-for-ios[44375:707] Remote wants to invoke removeBufferPermanently (object=0, class=BufferViewConfig)
+                         2012-07-19 22:30:08.831 iquassel[44375:707] ...Sync
+                         2012-07-19 22:30:08.833 iquassel[44375:707] Remote wants to invoke removeBufferPermanently (object=0, class=BufferViewConfig)
                          */
                         [self disconnect];
                         //                        BufferId *bufferId = [[v.list objectAtIndex:4] bufferId];
@@ -703,15 +703,15 @@
                         //                        [delegate quasselBufferListUpdated];
                     } else if ([functionName isEqualToString:@"removeBuffer"]) {
                         /*
-                         2012-07-19 22:08:27.521 quassel-for-ios[44375:707] ...list (
+                         2012-07-19 22:08:27.521 iquassel[44375:707] ...list (
                          "QVariant(integer(1))",
                          "QVariant(string(BufferViewConfig))",
                          "QVariant(string(0))",
                          "QVariant(byteArray(12))",
                          "QVariant(BufferId(259))"
                          )
-                         2012-07-19 22:08:27.523 quassel-for-ios[44375:707] ...Sync
-                         2012-07-19 22:08:27.524 quassel-for-ios[44375:707] Remote wants to invoke removeBuffer (object=0, class=BufferViewConfig)
+                         2012-07-19 22:08:27.523 iquassel[44375:707] ...Sync
+                         2012-07-19 22:08:27.524 iquassel[44375:707] Remote wants to invoke removeBuffer (object=0, class=BufferViewConfig)
                          */
                         // Temporarily hiding the buffer
                         [self disconnect];
@@ -731,25 +731,25 @@
                     NetworkId *networkId = [[NetworkId alloc] initWithInt:[[splittedObjectName objectAtIndex:0] intValue]];
                     NSString *nick = [splittedObjectName objectAtIndex:1];
                     /*
-                     2012-07-18 14:29:13.447 quassel-for-ios[42671:707] ...list (
+                     2012-07-18 14:29:13.447 iquassel[42671:707] ...list (
                      "<QVariant: 0xee934a0> integer = 1",
                      "<QVariant: 0xee8fad0> string = IrcUser",
                      "<QVariant: 0xee8b980> string = 4/sergio",
                      "<QVariant: 0xee92270> byte array with 4 bytes"
                      )
-                     2012-07-18 14:29:13.449 quassel-for-ios[42671:707] ...Sync
-                     2012-07-18 14:29:13.450 quassel-for-ios[42671:707] Remote wants to invoke quit (object=4/sergio, class=IrcUser)
+                     2012-07-18 14:29:13.449 iquassel[42671:707] ...Sync
+                     2012-07-18 14:29:13.450 iquassel[42671:707] Remote wants to invoke quit (object=4/sergio, class=IrcUser)
                      */
                     /*
-                     2012-07-18 14:30:04.034 quassel-for-ios[42671:707] ...list (
+                     2012-07-18 14:30:04.034 iquassel[42671:707] ...list (
                      "<QVariant: 0x2a1d90> integer = 1",
                      "<QVariant: 0x292380> string = IrcUser",
                      "<QVariant: 0x2ac0f0> string = 4/onr",
                      "<QVariant: 0x275450> byte array with 11 bytes",
                      "<QVariant: 0x2a2400> string = #startups"
                      )
-                     2012-07-18 14:30:04.035 quassel-for-ios[42671:707] ...Sync
-                     2012-07-18 14:30:04.037 quassel-for-ios[42671:707] Remote wants to invoke partChannel (object=4/onr, class=IrcUser)
+                     2012-07-18 14:30:04.035 iquassel[42671:707] ...Sync
+                     2012-07-18 14:30:04.037 iquassel[42671:707] Remote wants to invoke partChannel (object=4/onr, class=IrcUser)
                      */
                     if ([functionName isEqualToString:@"quit"]) {
                         NSMutableDictionary *usersForNetwork = [self.networkIdUserMapMap objectForKey:networkId];
@@ -776,28 +776,28 @@
 
                 } else if ([className isEqualToString:@"Network"]) {
                     /*
-                     2012-07-18 02:00:39.502 quassel-for-ios[42048:707] ...list (
+                     2012-07-18 02:00:39.502 iquassel[42048:707] ...list (
                      "<QVariant: 0xce731a0> integer = 1",
                      "<QVariant: 0xce73100> string = Network",
                      "<QVariant: 0xce69890> string = 14",
                      "<QVariant: 0x157830> byte array with 10 bytes",
                      "<QVariant: 0xce739e0> integer = 15"
-                     2012-07-18 10:11:38.701 quassel-for-ios[42306:707] Remote wants to invoke setLatency (object=14, class=Network)
+                     2012-07-18 10:11:38.701 iquassel[42306:707] Remote wants to invoke setLatency (object=14, class=Network)
                      )
                      */
                     if ([functionName isEqualToString:@"setLatency"]) {
 
                     } else if ([functionName isEqualToString:@"addIrcUser"]) {
                         /*
-                         2012-07-19 21:41:13.705 quassel-for-ios[44279:707] ...list (
+                         2012-07-19 21:41:13.705 iquassel[44279:707] ...list (
                          "QVariant(integer(1))",
                          "QVariant(string(Network))",
                          "QVariant(string(14))", <---- object ID, but how to use it?
                          "QVariant(byteArray(10))",
                          "QVariant(string(shiroki!quassel@nat/trolltech/x-qogwlmohakpjkkpn))"
                          )
-                         2012-07-19 21:41:13.707 quassel-for-ios[44279:707] ...Sync
-                         2012-07-19 21:41:13.709 quassel-for-ios[44279:707] Remote wants to invoke addIrcUser (object=14, class=Network)
+                         2012-07-19 21:41:13.707 iquassel[44279:707] ...Sync
+                         2012-07-19 21:41:13.709 iquassel[44279:707] Remote wants to invoke addIrcUser (object=14, class=Network)
                          */
 
                         // Die object ID ist vom netzwerk, daher wissen wir das netzwerk
@@ -843,7 +843,7 @@
                 } else if ([className isEqualToString:@"IrcChannel"]) {
 
                     /*
-                     2012-07-18 14:29:15.401 quassel-for-ios[42671:707] ...list (
+                     2012-07-18 14:29:15.401 iquassel[42671:707] ...list (
                      "<QVariant: 0x2a1f30> integer = 1",
                      "<QVariant: 0x275450> string = IrcChannel",
                      "<QVariant: 0x292380> string = 4/#quassel",
@@ -851,8 +851,8 @@
                      "<QVariant: 0x2a2100> list = (\n    roxahris\n)",
                      "<QVariant: 0x2b1850> list = (\n    \"\"\n)"
                      )
-                     2012-07-18 14:29:15.403 quassel-for-ios[42671:707] ...Sync
-                     2012-07-18 14:29:15.405 quassel-for-ios[42671:707] Remote wants to invoke joinIrcUsers (object=4/#quassel, class=IrcChannel)
+                     2012-07-18 14:29:15.403 iquassel[42671:707] ...Sync
+                     2012-07-18 14:29:15.405 iquassel[42671:707] Remote wants to invoke joinIrcUsers (object=4/#quassel, class=IrcChannel)
                      */
                     if ([functionName isEqualToString:@"joinIrcUsers"]) {
                         NSArray *list =[[v.list objectAtIndex:4] list];
@@ -889,7 +889,7 @@
             } else if (requestType == RpcCall) { // 2
                 NSLog(@"...RpcCall");
                 /*
-                 2012-07-10 17:01:07.276 quassel-for-ios[34759:707] ...list (
+                 2012-07-10 17:01:07.276 iquassel[34759:707] ...list (
                  "<QVariant: 0x161cf0> integer = 2",
                  "<QVariant: 0x161250> FIXME",
                  "<QVariant: 0x161270> message = <mgoetz!~mgoetz@noreg.fauleban.de> !"
@@ -909,15 +909,15 @@
                     // 						} else if(functionName.equals("__objectRenamed__") && ((String)packedFunc.get(0).getData()).equals("IrcUser")) {
 
                     /*
-                     2012-07-18 14:30:09.870 quassel-for-ios[42671:707] ...list (
+                     2012-07-18 14:30:09.870 iquassel[42671:707] ...list (
                      "<QVariant: 0xee934a0> integer = 2",
                      "<QVariant: 0xee905d0> string = __objectRenamed__",
                      "<QVariant: 0xee8b980> byte array with 7 bytes",
                      "<QVariant: 0xee871b0> string = 4/meric",
                      "<QVariant: 0xee8fa50> string = 4/meric_"
                      )
-                     2012-07-18 14:30:09.872 quassel-for-ios[42671:707] ...RpcCall
-                     2012-07-18 14:30:09.873 quassel-for-ios[42671:707] RPC: Core wants to call unknown method
+                     2012-07-18 14:30:09.872 iquassel[42671:707] ...RpcCall
+                     2012-07-18 14:30:09.873 iquassel[42671:707] RPC: Core wants to call unknown method
                      */
                     NSString *class = [[v.list objectAtIndex:2] asStringFromStringOrByteArray];
                     if ([class isEqualToString:@"IrcUser"]) {
@@ -961,22 +961,22 @@
             } else if (requestType == InitData) { // 4
                 NSLog(@"...InitData %@", [[v.list objectAtIndex:1] asStringFromStringOrByteArray]);
                 /*
-                 2012-07-19 22:48:51.484 quassel-for-ios[44460:707] ...list (
+                 2012-07-19 22:48:51.484 iquassel[44460:707] ...list (
                  "QVariant(integer(4))",
                  "QVariant(byteArray(12))",
                  "QVariant(string())",
                  "QVariant(dictionary({\n    LastSeenMsg = \"QVariant(list((\\n    \\\"QVariant(BufferId(255))\\\",\\n    \\\"QVariant(MsgId(7863649))\\\",\\n    \\\"QVariant(BufferId(260))\\\",\\n    \\\"QVariant(MsgId(7951196))\\\",\\n    \\\"QVariant(BufferId(248))\\\",\\n    \\\"QVariant(MsgId(7950979))\\\",\\n    \\\"QVariant(BufferId(249))\\\",\\n    \\\"QVariant(MsgId(7920611))\\\",\\n    \\\"QVariant(BufferId(250))\\\",\\n    \\\"QVariant(MsgId(7941053))\\\",\\n    \\\"QVariant(BufferId(252))\\\",\\n    \\\"QVariant(MsgId(7920611))\\\"\\n)))\";\n    MarkerLines = \"QVariant(list((\\n    \\\"QVariant(BufferId(255))\\\",\\n    \\\"QVariant(MsgId(7863649))\\\",\\n    \\\"QVariant(BufferId(248))\\\",\\n    \\\"QVariant(MsgId(7950979))\\\",\\n    \\\"QVariant(BufferId(249))\\\",\\n    \\\"QVariant(MsgId(7920611))\\\",\\n    \\\"QVariant(BufferId(250))\\\",\\n    \\\"QVariant(MsgId(7941053))\\\",\\n    \\\"QVariant(BufferId(252))\\\",\\n    \\\"QVariant(MsgId(7920611))\\\"\\n)))\";\n}))"
                  )
-                 2012-07-19 22:48:51.487 quassel-for-ios[44460:707] ...InitData BufferSyncer
+                 2012-07-19 22:48:51.487 iquassel[44460:707] ...InitData BufferSyncer
                  */
                 /*
-                 2012-07-19 22:48:51.494 quassel-for-ios[44460:707] ...list (
+                 2012-07-19 22:48:51.494 iquassel[44460:707] ...list (
                  "QVariant(integer(4))",
                  "QVariant(byteArray(16))",
                  "QVariant(string(0))",
                  "QVariant(dictionary({\n    BufferList = \"QVariant(list((\\n    \\\"QVariant(BufferId(259))\\\",\\n    \\\"QVariant(BufferId(249))\\\",\\n    \\\"QVariant(BufferId(248))\\\",\\n    \\\"QVariant(BufferId(250))\\\",\\n    \\\"QVariant(BufferId(255))\\\",\\n    \\\"QVariant(BufferId(252))\\\",\\n    \\\"QVariant(BufferId(257))\\\",\\n    \\\"QVariant(BufferId(258))\\\",\\n    \\\"QVariant(BufferId(260))\\\"\\n)))\";\n    RemovedBuffers = \"QVariant(list((\\n)))\";\n    TemporarilyRemovedBuffers = \"QVariant(list((\\n)))\";\n    addNewBuffersAutomatically = \"QVariant(boolean(NO))\";\n    allowedBufferTypes = \"QVariant(integer(15))\";\n    bufferViewName = \"QVariant(string(Alle Chats))\";\n    disableDecoration = \"QVariant(boolean(NO))\";\n    hideInactiveBuffers = \"QVariant(boolean(NO))\";\n    minimumActivity = \"QVariant(integer(0))\";\n    networkId = \"QVariant(NetworkId(0))\";\n    sortAlphabetically = \"QVariant(boolean(NO))\";\n}))"
                  )
-                 2012-07-19 22:48:51.497 quassel-for-ios[44460:707] ...InitData BufferViewConfig
+                 2012-07-19 22:48:51.497 iquassel[44460:707] ...InitData BufferViewConfig
                  */
                 NSString *className = [[v.list objectAtIndex:1] asStringFromStringOrByteArray];
                 NSString *objectName = [[v.list objectAtIndex:2] asStringFromStringOrByteArray];
@@ -1064,12 +1064,12 @@
             } else if (requestType == HeartBeat) { // 5
                 NSLog(@"...HeartBeat");
 
-                /* 2012-07-09 14:00:13.704 quassel-for-ios[32998:707] array with 2 entries
-                 2012-07-09 14:00:13.705 quassel-for-ios[32998:707] Deserializing integer
-                 2012-07-09 14:00:13.707 quassel-for-ios[32998:707] Decoded value <QVariant: 0x124e80> integer = 5
-                 2012-07-09 14:00:13.708 quassel-for-ios[32998:707] Deserializing time
-                 2012-07-09 14:00:13.710 quassel-for-ios[32998:707] Decoded value <QVariant: 0xde41500> FIXME
-                 2012-07-09 14:00:13.711 quassel-for-ios[32998:707] ...list (
+                /* 2012-07-09 14:00:13.704 iquassel[32998:707] array with 2 entries
+                 2012-07-09 14:00:13.705 iquassel[32998:707] Deserializing integer
+                 2012-07-09 14:00:13.707 iquassel[32998:707] Decoded value <QVariant: 0x124e80> integer = 5
+                 2012-07-09 14:00:13.708 iquassel[32998:707] Deserializing time
+                 2012-07-09 14:00:13.710 iquassel[32998:707] Decoded value <QVariant: 0xde41500> FIXME
+                 2012-07-09 14:00:13.711 iquassel[32998:707] ...list (
                  "<QVariant: 0x124e80> integer = 5",
                  "<QVariant: 0xde41500> FIXME"
                  )
@@ -1282,7 +1282,7 @@
     [delegate quasselSocketDidDisconnect:lastErrorMsg];
 }
 
-- (void)socket:(GCDAsyncSocket *)sock didConnectToHost:(NSString *)host port:(UInt16)port
+- (void)socket:(GCDAsyncSocket *)sock didConnectToHost:(NSString *)host port:(uint16_t)port
 {
     if (socket != sock) {
         NSLog(@"Warning: didConnectToHost for wrong socket! %@ != %@", socket, sock);
@@ -1350,7 +1350,7 @@
 
     while (inputData.length >= 4) {
         int blockLength = (int)*((int*)(inputData.bytes));
-        blockLength = CFSwapInt32BigToHost(blockLength);
+        blockLength = NSSwapBigIntToHost(blockLength);
 #ifdef QUASSEL_DEBUG_PROTOCOL
         NSLog(@"QuasselCoreConnection didReadData next block has %d bytes, input data length is %d bytes",blockLength, inputData.length);
 #endif
