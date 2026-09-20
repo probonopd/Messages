@@ -323,9 +323,22 @@
 // URL to whatever handler the desktop environment registers for it.
 - (void)openLink:(NSURL *)url
 {
+	// Handing the URL over can take as long as the handler runs: a
+	// desktop that starts the browser through a wrapper script only
+	// returns when the browser quits, and the window would be frozen
+	// until then. The thread retains the URL until it is done.
+	[NSThread detachNewThreadSelector:@selector(openLinkOnOwnThread:)
+		toTarget:self withObject:url];
+}
+
+- (void)openLinkOnOwnThread:(NSURL *)url
+{
+	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+
 	if (![[NSWorkspace sharedWorkspace] openURL:url]) {
 		NSLog(@"Messages: failed to open link %@", url);
 	}
+	[pool release];
 }
 
 - (BOOL)textView:(NSTextView *)textView
