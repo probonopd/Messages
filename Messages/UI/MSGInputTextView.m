@@ -6,7 +6,32 @@
 
 #import "MSGInputTextView.h"
 
+// The one font the whole window shares.  GNUstep takes a zero font size
+// literally, so the default size is asked for by name.
+static NSFont *MSGComposerFont(void)
+{
+	return [NSFont systemFontOfSize:[NSFont systemFontSize]];
+}
+
 @implementation MSGInputTextView
+
+// Every other text in the app asks for this font itself.  The composer did
+// not, so it kept NSTextView's process-wide default typing attributes, which
+// are built once from +[NSFont userFontOfSize:0].  That is the one font entry
+// point the desktop's font behaviours leave unenforced, so the resolved face
+// is whatever fontconfig picks and the composer ended up drawn in a different
+// weight from the rest of the window - bold here - with nothing in the app
+// able to predict or override it.
+- (instancetype)initWithFrame:(NSRect)frame
+{
+	self = [super initWithFrame:frame];
+	if (self) {
+		// -setFont: covers the typing attributes too, so text typed later
+		// uses the same font as the text already in the box.
+		[self setFont:MSGComposerFont()];
+	}
+	return self;
+}
 
 - (void)setSendTarget:(id)target action:(SEL)action
 {

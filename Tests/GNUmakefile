@@ -77,7 +77,7 @@ BUBBLE_SRC = $(APP_DIR)/Bubbles/MSGBubbleMessage.m $(APP_DIR)/Bubbles/MSGBubbleT
 # The transcript view is AppKit code; NSView/NSTextStorage work headless.
 t_bubbles_OBJC_FILES = t_bubbles.m $(BUBBLE_SRC) $(APP_DIR)/UI/MSGMessageRenderer.m \
             $(APP_DIR)/UI/MSGLinkDetector.m $(APP_DIR)/UI/MSGUserListView.m $(APP_DIR)/UI/MSGMessageView.m \
-             $(MODEL_SRC)
+             $(APP_DIR)/UI/MSGInputTextView.m $(MODEL_SRC)
 t_bubbles_TOOL_LIBS += -lgnustep-gui
 
 t_badge_OBJC_FILES = t_badge.m $(MODEL_SRC)

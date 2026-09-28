@@ -23,6 +23,7 @@
 #import "MSGUserListView.h"
 #import "MSGMessageView.h"
 #import "MSGChannel.h"
+#import "MSGInputTextView.h"
 
 // The silhouette builder is private to the view; declaring the category
 // here just lets the test call it.
@@ -448,6 +449,34 @@ int main(void)
 		[tc release];
 		[lm release];
 		[storage release];
+	}
+
+	// --- Composer font ---------------------------------------------------
+	{
+		// The composer is the one text view that could have inherited
+		// NSTextView's process-wide default typing attributes, which are
+		// built from the one font entry point the desktop's font
+		// behaviours leave unenforced, and so come back in a face of
+		// fontconfig's choosing.  It has to ask for the window's font
+		// itself, and the ask has to cover text typed later too.
+		NSFont *windowFont = [NSFont systemFontOfSize:[NSFont systemFontSize]];
+		MSGInputTextView *composer = [[MSGInputTextView alloc]
+		    initWithFrame:NSMakeRect(0.0, 0.0, 400.0, 24.0)];
+		PASS([[composer font] isEqual:windowFont],
+		    "the composer draws in the window's font, not a default of its own");
+
+		NSFont *typingFont = [[composer typingAttributes]
+		    objectForKey:NSFontAttributeName];
+		PASS([typingFont isEqual:windowFont],
+		    "text typed into the composer uses the same font");
+
+		// Whatever is already in the box has to have moved with it.
+		[composer setString:@"H"];
+		NSFont *storedFont = [[composer textStorage]
+		    attribute:NSFontAttributeName atIndex:0 effectiveRange:NULL];
+		PASS([storedFont isEqual:windowFont],
+		    "text already in the composer uses the same font");
+		[composer release];
 	}
 
 	[arp release];
