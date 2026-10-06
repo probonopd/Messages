@@ -38,7 +38,7 @@ MSGChannelType MSGChannelTypeFromString(NSString *s)
 	return n ? [n integerValue] : MSGChannelTypeChannel;
 }
 
-// Noise relayed by IRC bouncers/cores whenever the last other client leaves.
+// Noise relayed by IRC bouncers/cores/servers (last client left, quit reasons).
 // Leading mIRC control codes and blanks are skipped so formatted copies match too.
 static BOOL IsSuppressedMessage(MSGMessage *message)
 {
@@ -51,7 +51,10 @@ static BOOL IsSuppressedMessage(MSGMessage *message)
 		}
 		i++;
 	}
-	return [[text substringFromIndex:i] hasPrefix:@"All Quassel clients vanished"];
+	NSString *body = [text substringFromIndex:i];
+	return [body hasPrefix:@"All Quassel clients vanished"]
+		|| [body hasPrefix:@"Ping timeout:"]
+		|| [body hasPrefix:@"Read error:"];
 }
 
 @implementation MSGChannel

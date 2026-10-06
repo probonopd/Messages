@@ -302,10 +302,13 @@ static MSGMessageType QuasselMessageType(enum MessageType type)
 	}
 }
 
-// The core emits this notice whenever the last other client disconnects; it is noise.
+// Core/server notices (last client left, quit reasons) that are only noise here.
 static BOOL IsSuppressedQuasselMessage(Message *message)
 {
-	return [message.contents hasPrefix:@"All Quassel clients vanished"];
+	NSString *contents = message.contents;
+	return [contents hasPrefix:@"All Quassel clients vanished"]
+		|| [contents hasPrefix:@"Ping timeout:"]
+		|| [contents hasPrefix:@"Read error:"];
 }
 
 - (void)appendMessages:(NSArray *)messages toChannel:(MSGChannel *)channel
