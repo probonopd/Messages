@@ -222,8 +222,17 @@ static id MSGObject(id value)
 	return nil;
 }
 
+// Noise relayed by IRC bouncers/cores whenever the last other client leaves.
+static BOOL IsSuppressedMessage(MSGMessage *message)
+{
+	return [message.text hasPrefix:@"All Quassel clients vanished"];
+}
+
 - (void)addMessage:(MSGMessage *)message
 {
+	if (IsSuppressedMessage(message)) {
+		return;
+	}
 	MSGMessage *existing = [self messageWithIdentifier:message.identifier];
 	if (existing) {
 		NSInteger idx = [_messages indexOfObject:existing];
@@ -260,7 +269,7 @@ static id MSGObject(id value)
 	NSMutableArray *newMessages = [[NSMutableArray alloc] init];
 	for (MSGMessage *m in messages) {
 		MSGMessage *existing = [self messageWithIdentifier:m.identifier];
-		if (!existing) {
+		if (!existing && !IsSuppressedMessage(m)) {
 			[newMessages addObject:m];
 		}
 	}
