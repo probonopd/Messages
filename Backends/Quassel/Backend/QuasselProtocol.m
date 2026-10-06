@@ -302,10 +302,19 @@ static MSGMessageType QuasselMessageType(enum MessageType type)
 	}
 }
 
+// The core emits this notice whenever the last other client disconnects; it is noise.
+static BOOL IsSuppressedQuasselMessage(Message *message)
+{
+	return [message.contents hasPrefix:@"All Quassel clients vanished"];
+}
+
 - (void)appendMessages:(NSArray *)messages toChannel:(MSGChannel *)channel
 	countUnseen:(BOOL)countUnseen
 {
 	for (Message *message in messages) {
+		if (IsSuppressedQuasselMessage(message)) {
+			continue;
+		}
 		MSGMessage *converted = [QuasselProtocol messageFromQuasselMessage:message
 			channelId:channel.identifier];
 		if ([channel messageWithIdentifier:converted.identifier]) {
@@ -544,6 +553,9 @@ static MSGMessageType QuasselMessageType(enum MessageType type)
 	if (style == ReceiveStylePrepended) {
 		NSMutableArray *older = [NSMutableArray array];
 		for (Message *message in messages) {
+			if (IsSuppressedQuasselMessage(message)) {
+				continue;
+			}
 			MSGMessage *converted = [QuasselProtocol messageFromQuasselMessage:message
 				channelId:channel.identifier];
 			if (![channel messageWithIdentifier:converted.identifier]) {
