@@ -38,6 +38,22 @@ MSGChannelType MSGChannelTypeFromString(NSString *s)
 	return n ? [n integerValue] : MSGChannelTypeChannel;
 }
 
+// Noise relayed by IRC bouncers/cores whenever the last other client leaves.
+// Leading mIRC control codes and blanks are skipped so formatted copies match too.
+static BOOL IsSuppressedMessage(MSGMessage *message)
+{
+	NSString *text = message.text;
+	NSUInteger i = 0, n = [text length];
+	while (i < n) {
+		unichar c = [text characterAtIndex:i];
+		if (c > 0x20 && c != 0xA0) {
+			break;
+		}
+		i++;
+	}
+	return [[text substringFromIndex:i] hasPrefix:@"All Quassel clients vanished"];
+}
+
 @implementation MSGChannel
 
 - (instancetype)init
@@ -134,7 +150,10 @@ static id MSGObject(id value)
 		if (dict[@"messages"] && [dict[@"messages"] isKindOfClass:[NSArray class]]) {
 			for (id m in dict[@"messages"]) {
 				if ([m isKindOfClass:[NSDictionary class]]) {
-					[_messages addObject:[[[MSGMessage alloc] initWithDictionary:m] autorelease]];
+					MSGMessage *restored = [[[MSGMessage alloc] initWithDictionary:m] autorelease];
+					if (!IsSuppressedMessage(restored)) {
+						[_messages addObject:restored];
+					}
 				}
 			}
 		}
@@ -220,12 +239,6 @@ static id MSGObject(id value)
 		}
 	}
 	return nil;
-}
-
-// Noise relayed by IRC bouncers/cores whenever the last other client leaves.
-static BOOL IsSuppressedMessage(MSGMessage *message)
-{
-	return [message.text hasPrefix:@"All Quassel clients vanished"];
 }
 
 - (void)addMessage:(MSGMessage *)message
